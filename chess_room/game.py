@@ -151,8 +151,9 @@ def resign(db: Connection, game_id: int, expected_ply: int) -> None:
             return
         if g.ply != expected_ply or g.result != "*":
             raise MoveConflict("The position has changed; check the board before resigning")
-        db.execute("UPDATE chess_room.game SET phase='closing', result='0-1', reason='resignation' WHERE id=%s",
-                   (game_id,))
+        result = "1/2-1/2" if chess.Board(g.fen).has_insufficient_material(chess.BLACK) else "0-1"
+        db.execute("UPDATE chess_room.game SET phase='closing', result=%s, reason='resignation' WHERE id=%s",
+                   (result, game_id))
 
 
 def hold_engine(db: Connection, game_id: int, paused: bool) -> None:

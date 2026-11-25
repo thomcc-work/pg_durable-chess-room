@@ -8,9 +8,11 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import chess
+import chess.pgn
 
 from chess_room import cluster, game, opponent
 from chess_room.game_demo import wait_until
+from chess_room.room import pgn, snapshot
 
 
 class DurableTurns(unittest.TestCase):
@@ -19,6 +21,16 @@ class DurableTurns(unittest.TestCase):
         cluster.use_private_socket()
         with cluster.connect() as db:
             game.install(db)
+
+    def test_resignation_result_in_scoresheet_and_pgn(self):
+        with cluster.connect() as db:
+            for preset, result in (("standard", "0-1"), ("puzzle-1", "1/2-1/2"), ("puzzle-5", "1/2-1/2")):
+                with self.subTest(preset=preset):
+                    gid = game.create(db, "unused", preset)
+                    game.resign(db, gid, 0)
+                    g = game.get(db, gid)
+                    self.assertEqual(snapshot(db, g, None)["result"], result)
+                    self.assertIn(f'[Result "{result}"]', pgn(db, g))
 
     def test_racing_duplicate_mate_commits_once_and_completes_one_workflow(self):
         with cluster.connect() as db:
