@@ -6,7 +6,7 @@ cluster with pg_durable. No shared database is needed.
 
 ## Start a private cluster
 
-Use Linux, Bash, and a PostgreSQL 17 installation with pg_durable 0.2.9 or
+Use Linux, uv, Python 3.11+, and a PostgreSQL 17 installation with pg_durable 0.2.9 or
 newer installed. On the hackathon host, select that installation first:
 
 ```bash
@@ -17,8 +17,7 @@ Elsewhere, `pg_config` on `PATH` is the default. As a non-root user, from
 this checkout:
 
 ```bash
-./scripts/cluster.sh init
-./scripts/cluster.sh psql -f sql/schema.sql
+uv run -m mate init
 run=$(./scripts/run.sh new 2)
 ./scripts/run.sh finish "$run"
 ```
@@ -26,7 +25,7 @@ run=$(./scripts/run.sh new 2)
 `init` refuses to overwrite an existing `.mate/`. The server accepts no TCP
 connections; its socket, data, and log are inside that private directory.
 The app submits workflows as `mate_app`, not `postgres`. Use
-`./scripts/cluster.sh stop` when done and `./scripts/cluster.sh start` to
+`uv run -m mate stop` when done and `uv run -m mate start` to
 reopen the same data. To discard it, stop the cluster first, then remove this
 checkout's `.mate/` directory.
 
@@ -80,9 +79,9 @@ follow the [live run instructions](LIVE.md). `new` and `demo` never send HTTP.
 The [board key](data/boards.csv) contains **all** mating moves, not one
 preferred solution. To verify the key offline with the `chess==1.11.2` Python
 package installed, run `python3 scripts/check_boards.py`; alternatively,
-`uv run scripts/check_boards.py` installs the pinned checker. Neither Python
-nor a chess engine is needed to run the experiment.
+`uv run scripts/check_boards.py` installs the pinned checker. The experiment
+itself does not require a chess library or engine.
 
-To check the SQL grader alone, run `./scripts/cluster.sh psql -f tests/grade.sql`.
+To check the SQL grader alone, run `uv run -m mate psql -f tests/grade.sql`.
 It exercises format, promotion and response-envelope edge cases in a transaction
 that rolls back.

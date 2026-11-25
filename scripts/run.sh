@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd -- "$(dirname -- "$0")/.."
-psql() { ./scripts/cluster.sh psql "$@"; }
+psql() { uv run -m mate psql "$@"; }
 die() { echo "$*" >&2; exit 1; }
 positive() { [[ $1 =~ ^[1-9][0-9]*$ ]]; }
 

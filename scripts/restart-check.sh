@@ -21,7 +21,7 @@ restart_at_checkpoint() {
     before=$(early_attempts)
     echo "Run $run: $recorded recorded; board|prompt|instance|fixture attempt|HTTP status|body MD5"
     echo "$before"
-    ./scripts/cluster.sh restart
+    uv run -m mate restart
 }
 
 verify_recovery() {
