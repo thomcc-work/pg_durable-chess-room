@@ -48,6 +48,8 @@ def install(db: Connection) -> None:
         db.execute("SELECT pg_advisory_xact_lock(17422, 1)")
         if db.execute("SELECT to_regclass('chess_room.game_move')").fetchone() == (None,):
             db.execute((ROOT / "sql/game.sql").read_text())
+        else:
+            db.execute("ALTER TABLE chess_room.game ADD COLUMN IF NOT EXISTS creation_request uuid UNIQUE")
 
 
 def presets() -> dict[str, tuple[str, str]]:
@@ -59,14 +61,23 @@ def presets() -> dict[str, tuple[str, str]]:
     return result
 
 
-def create(db: Connection, engine: str, preset: str = "standard", *, hold_engine: bool = False) -> int:
+def create(db: Connection, engine: str, preset: str = "standard", *, hold_engine: bool = False,
+           request: UUID | None = None) -> int:
     try:
         title, fen = presets()[preset]
     except KeyError:
         raise ValueError("Unknown starting position") from None
     with db.transaction():
-        game_id, = db.execute("INSERT INTO chess_room.game(title,engine,start_fen,fen,engine_paused) "
-                              "VALUES (%s,%s,%s,%s,%s) RETURNING id", (title, engine, fen, fen, hold_engine)).fetchone()
+        inserted = db.execute("INSERT INTO chess_room.game(title,engine,start_fen,fen,engine_paused,creation_request) "
+                              "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (creation_request) DO NOTHING RETURNING id",
+                              (title, engine, fen, fen, hold_engine, request)).fetchone()
+        if inserted is None:
+            previous_id, previous_fen = db.execute("SELECT id,start_fen FROM chess_room.game WHERE creation_request=%s",
+                                                    (request,)).fetchone()
+            if previous_fen != fen:
+                raise MoveConflict("This request already created a game with another starting position")
+            return previous_id
+        game_id, = inserted
         release = (f"UPDATE chess_room.game SET phase=CASE phase WHEN 'submitted' THEN 'engine' "
                    f"ELSE 'finished' END WHERE id={game_id} AND phase IN ('submitted','closing')")
         ongoing = f"SELECT phase <> 'finished' FROM chess_room.game WHERE id={game_id}"

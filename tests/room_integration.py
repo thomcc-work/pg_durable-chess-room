@@ -61,7 +61,7 @@ class BoardHTTP(unittest.TestCase):
                         conn.close()
 
     def test_move_receipt_pgn_and_historical_board(self):
-        gid = self.post("/api/games", {"preset": "puzzle-5"})["id"]
+        gid = self.post("/api/games", {"preset": "puzzle-5", "request": str(uuid4())})["id"]
         path = f"/api/games/{gid}"
         command = {"ply": 0, "uci": "c7c8r", "request": str(uuid4())}
         first = self.post(path + "/move", command)
@@ -85,3 +85,18 @@ class BoardHTTP(unittest.TestCase):
                 self.assertEqual(response.headers.get_content_type(), "image/svg+xml")
                 images.append(response.read())
         self.assertNotEqual(*images)
+
+    def test_lost_game_creation_reply_reuses_the_game_and_workflow(self):
+        command = {"preset": "puzzle-5", "request": str(uuid4())}
+        self.post("/api/games", command)  # The client lost the first response after commit.
+        recovered = self.post("/api/games", command)["id"]
+        with cluster.connect() as db:
+            rows = db.execute("SELECT id,instance FROM chess_room.game WHERE creation_request=%s",
+                              (command["request"],)).fetchall()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0][0], recovered)
+            self.assertTrue(rows[0][1])
+        self.assertNotEqual(self.post("/api/games", command | {"request": str(uuid4())})["id"], recovered)
+        with self.assertRaises(urllib.error.HTTPError) as conflict:
+            self.post("/api/games", command | {"preset": "standard"})
+        self.assertEqual(conflict.exception.code, 409)

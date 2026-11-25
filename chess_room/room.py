@@ -204,7 +204,10 @@ class BoardHandler(BaseHTTPRequestHandler):
                 preset = body.get("preset", "standard")
                 if not isinstance(preset, str):
                     raise ValueError("Expected a starting position name")
-                self.respond(201, {"id": game.create(db, self.server.opponent_name, preset)})
+                key = body.get("request")
+                if not isinstance(key, str):
+                    raise ValueError("Expected a creation request UUID")
+                self.respond(201, {"id": game.create(db, self.server.opponent_name, preset, request=UUID(key))})
                 return
             match = re.fullmatch(r"/api/games/([1-9][0-9]{0,17})/(move|resign|hold)", path)
             if not match:

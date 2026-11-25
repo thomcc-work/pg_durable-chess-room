@@ -54,6 +54,10 @@ insufficient material, automatic repetition/move-count draws, and resignation
 end play. There are no accounts: this room is for a trusted local machine,
 not a public multiplayer server.
 
+If the response to **Play White** is lost, retry from the same dialog to
+open the game already created. An API client should likewise send a
+`request` UUID with `POST /api/games` and reuse it only for that creation.
+
 ## Restart in the middle of a turn
 
 1. In a new game, expand **Durable turn receipt**, choose **Hold engine

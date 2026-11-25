@@ -189,10 +189,13 @@ $("do-resign").onclick = async () => {
   try { await api(`${base}/resign`, {ply:movePly}); } catch(e) { message(e.message); }
   await refresh();
 };
-$("new").onclick = () => { $("setup-error").textContent = ""; $("setup").showModal(); };
+let creation = null;
+$("new").onclick = () => { creation = null; $("setup-error").textContent = ""; $("setup").showModal(); };
 $("create").onclick = async () => {
   $("create").disabled = true;
-  try { const {id} = await api("/api/games", {preset:$("preset").value}); location.assign(`/games/${id}`); }
+  const preset = $("preset").value;
+  if (!creation || creation.preset !== preset) creation = {preset, request:crypto.randomUUID()};
+  try { const {id} = await api("/api/games", creation); location.assign(`/games/${id}`); }
   catch(e) { $("setup-error").textContent = e.message; $("create").disabled = false; }
 };
 $("saved").onchange = () => { if ($("saved").value) location.assign(`/games/${$("saved").value}`); };

@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS chess_room.game (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     instance text UNIQUE,
+    creation_request uuid UNIQUE,
     title text NOT NULL,
     engine text NOT NULL,
     engine_paused boolean NOT NULL DEFAULT false,
