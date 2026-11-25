@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS mate.game (
+CREATE TABLE IF NOT EXISTS chess_room.game (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     instance text UNIQUE,
     title text NOT NULL,
@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS mate.game (
     CHECK ((result <> '*') = (phase IN ('closing','finished')))
 );
 
-CREATE TABLE IF NOT EXISTS mate.game_move (
-    game_id bigint NOT NULL REFERENCES mate.game,
+CREATE TABLE IF NOT EXISTS chess_room.game_move (
+    game_id bigint NOT NULL REFERENCES chess_room.game,
     ply integer NOT NULL CHECK (ply > 0),
     actor text NOT NULL CHECK (actor IN ('human','engine')),
     uci text NOT NULL,

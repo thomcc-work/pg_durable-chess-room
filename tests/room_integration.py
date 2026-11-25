@@ -11,8 +11,8 @@ from uuid import uuid4
 
 import chess.pgn
 
-from mate import cluster, game
-from mate.room import BoardServer
+from chess_room import cluster, game
+from chess_room.room import BoardServer
 
 
 class BoardHTTP(unittest.TestCase):

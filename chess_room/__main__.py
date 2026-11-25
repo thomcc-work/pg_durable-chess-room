@@ -10,13 +10,13 @@ from . import cluster, experiment, recovery
 def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(
         prog="uv run -m chess_room",
-        description="The Chess Room: play Stockfish or compare mate-in-one prompts.",
+        description="The Chess Room: play Stockfish or compare chess prompts.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
     for name, help_text in (
         ("init", "create a private cluster and install the applet schema"),
         ("start", "open the saved cluster"), ("stop", "stop it without deleting data"),
-        ("restart", "restart the applet cluster"), ("psql", "open psql as mate_app (accepts psql flags)"),
+        ("restart", "restart the applet cluster"), ("psql", "open psql as chess_room_app (accepts psql flags)"),
         ("admin", "open the private cluster's admin console (accepts psql flags)"),
         ("game-demo", "restart mid-game, retry a move and continue against real Stockfish"),
     ):
@@ -35,7 +35,7 @@ def main(argv: list[str]) -> None:
     args = parser.parse_args(argv[:1] if console else argv)
     cluster.use_private_socket()
     if console:
-        cluster.psql(argv[1:], "postgres" if args.command == "admin" else "mate_app")
+        cluster.psql(argv[1:], "postgres" if args.command == "admin" else "chess_room_app")
     elif args.command == "init":
         cluster.init()
     elif args.command in ("start", "stop", "restart"):

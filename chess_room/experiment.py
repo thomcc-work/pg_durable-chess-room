@@ -27,7 +27,7 @@ class Run:
 def get_run(db: Connection, run_id: int) -> Run:
     with db.cursor(row_factory=class_row(Run)) as cur:
         run = cur.execute("SELECT id, provider, deployment, settings, base_url, api_version "
-                          "FROM mate.run WHERE id = %s", (run_id,)).fetchone()
+                          "FROM chess_room.run WHERE id = %s", (run_id,)).fetchone()
     if run is None:
         raise ValueError(f"No such run: {run_id}")
     return run
@@ -37,10 +37,10 @@ def chat_base_url(db: Connection) -> str:
     row = db.execute("""
         SELECT o.option_value FROM pg_foreign_server s
         JOIN pg_foreign_data_wrapper w ON w.oid = s.srvfdw, pg_options_to_table(s.srvoptions) o
-        WHERE s.srvname = 'mate_chat' AND w.fdwname = 'pg_durable_fdw' AND o.option_name = 'base_url'
+        WHERE s.srvname = 'chess_room_chat' AND w.fdwname = 'pg_durable_fdw' AND o.option_name = 'base_url'
     """).fetchone()
     if not row or not re.fullmatch(r"https://[A-Za-z0-9-]+\.openai\.azure\.com/?", row[0]):
-        raise ValueError("Configure mate_chat with the HTTPS base URL of your authorized Azure resource.")
+        raise ValueError("Configure chess_room_chat with the HTTPS base URL of your authorized Azure resource.")
     return row[0]
 
 
@@ -55,7 +55,7 @@ def new_run(db: Connection, count: int | None, deployment: str | None = None) ->
         raise ValueError("Invalid Azure deployment name")
     with db.transaction():
         run_id, = db.execute("""
-            INSERT INTO mate.run(provider, deployment, settings, base_url, api_version)
+            INSERT INTO chess_room.run(provider, deployment, settings, base_url, api_version)
             VALUES (%s,%s,%s,%s,%s) RETURNING id
         """, ("azure" if live else "fixture", deployment or "canned-v1",
               Jsonb({"temperature": 0, "max_tokens": 32, "n": 1}),
@@ -68,7 +68,7 @@ def new_run(db: Connection, count: int | None, deployment: str | None = None) ->
                 cells.append((run_id, int(row["board"]), row["title"], row["fen"], row["mates"].split(),
                               variant, prompt(variant, row["fen"]), fixture))
         with db.cursor() as cur:
-            cur.executemany("INSERT INTO mate.cell(run_id,board,title,fen,mates,variant,prompt,fixture) "
+            cur.executemany("INSERT INTO chess_room.cell(run_id,board,title,fen,mates,variant,prompt,fixture) "
                             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)", cells)
     return run_id
 
@@ -77,39 +77,39 @@ def request_node(db: Connection, run: Run, cell_id: int, message: str) -> str:
     if run.provider == "fixture":
         # The insert is unconditional: replay must remain visible at the fixture provider.
         query = f"""WITH receipt AS (
-            INSERT INTO mate.fixture_attempt(cell_id) VALUES ({cell_id}) RETURNING cell_id
+            INSERT INTO chess_room.fixture_attempt(cell_id) VALUES ({cell_id}) RETURNING cell_id
         ) SELECT (fixture->>'status')::int AS status, 'text' AS encoding, fixture->>'body' AS body
-          FROM mate.cell JOIN receipt ON id = cell_id"""
+          FROM chess_room.cell JOIN receipt ON id = cell_id"""
         return db.execute("SELECT df.sql(%s)", (query,)).fetchone()[0]
     if chat_base_url(db) != run.base_url:
-        raise ValueError(f"mate_chat destination changed since run {run.id} was frozen")
+        raise ValueError(f"chess_room_chat destination changed since run {run.id} was frozen")
     path = f"/openai/deployments/{run.deployment}/chat/completions?api-version={run.api_version}"
     body = run.settings | {"messages": [{"role": "user", "content": message}]}
     return db.execute("""
-        SELECT df.http(df.endpoint('mate_chat', %s), 'POST', %s, '{"Content-Type":"application/json"}'::jsonb)
+        SELECT df.http(df.endpoint('chess_room_chat', %s), 'POST', %s, '{"Content-Type":"application/json"}'::jsonb)
     """, (path, json.dumps(body))).fetchone()[0]
 
 
 def launch_pair(db: Connection, run: Run, board: int, *, delay_request=False, delay_finish=False) -> None:
     with db.transaction():
-        cells = db.execute("SELECT id, variant, prompt FROM mate.cell WHERE run_id=%s AND board=%s "
+        cells = db.execute("SELECT id, variant, prompt FROM chess_room.cell WHERE run_id=%s AND board=%s "
                            "AND instance IS NULL ORDER BY variant FOR UPDATE", (run.id, board)).fetchall()
         for cell_id, variant, message in cells:
             request = request_node(db, run, cell_id, message)
-            capture = (f"UPDATE mate.cell SET http_status=$reply.status, encoding=$reply.encoding, "
+            capture = (f"UPDATE chess_room.cell SET http_status=$reply.status, encoding=$reply.encoding, "
                        f"body=$reply.body WHERE id={cell_id}")
             graph, = db.execute("SELECT (%s::text |=> 'reply') ~> df.sql(%s)", (request, capture)).fetchone()
             if delay_request:
                 graph, = db.execute("SELECT df.sleep(15) ~> %s::text", (graph,)).fetchone()
             if delay_finish:
                 graph, = db.execute("SELECT %s::text ~> df.sleep(15)", (graph,)).fetchone()
-            db.execute("UPDATE mate.cell SET instance=df.start(%s,%s) WHERE id=%s",
-                       (graph, f"mate/{run.id}/{board}/{variant}", cell_id))
+            db.execute("UPDATE chess_room.cell SET instance=df.start(%s,%s) WHERE id=%s",
+                       (graph, f"chess-room/eval/{run.id}/{board}/{variant}", cell_id))
 
 
 def finish_pair(db: Connection, run: Run, board: int) -> None:
     launch_pair(db, run, board)
-    cells = db.execute("SELECT id, instance FROM mate.cell WHERE run_id=%s AND board=%s AND verdict IS NULL",
+    cells = db.execute("SELECT id, instance FROM chess_room.cell WHERE run_id=%s AND board=%s AND verdict IS NULL",
                        (run.id, board)).fetchall()
     for cell_id, instance in cells:
         state, = db.execute("SELECT df.await_instance(%s, 90)", (instance,)).fetchone()
@@ -119,23 +119,23 @@ def finish_pair(db: Connection, run: Run, board: int) -> None:
             raise ValueError(f"Workflow {instance} is not terminal: {state}")
         # Read in a fresh statement: the worker may have committed its reply while we waited.
         status, encoding, body, mates = db.execute(
-            "SELECT http_status, encoding, body, mates FROM mate.cell WHERE id=%s", (cell_id,)
+            "SELECT http_status, encoding, body, mates FROM chess_room.cell WHERE id=%s", (cell_id,)
         ).fetchone()
         if status is None:
             raise ValueError(f"Workflow {instance} completed without recording a response")
         verdict, answer = grade(status, encoding, body, mates)
-        db.execute("UPDATE mate.cell SET verdict=%s, answer=%s WHERE id=%s AND verdict IS NULL",
+        db.execute("UPDATE chess_room.cell SET verdict=%s, answer=%s WHERE id=%s AND verdict IS NULL",
                    (verdict, answer, cell_id))
 
 
 def board_numbers(db: Connection, run: Run) -> list[int]:
-    return [n for n, in db.execute("SELECT DISTINCT board FROM mate.cell WHERE run_id=%s ORDER BY board", (run.id,))]
+    return [n for n, in db.execute("SELECT DISTINCT board FROM chess_room.cell WHERE run_id=%s ORDER BY board", (run.id,))]
 
 
 def scorecard(db: Connection, run: Run) -> None:
     print(f"Run {run.id} | {run.provider} | {run.deployment} | {json.dumps(run.settings)}")
     cells = db.execute("SELECT board, title, variant, answer, verdict, http_status, instance "
-                       "FROM mate.cell WHERE run_id=%s ORDER BY board, variant", (run.id,)).fetchall()
+                       "FROM chess_room.cell WHERE run_id=%s ORDER BY board, variant", (run.id,)).fetchall()
     table = [("Board", "Position", "A answer", "A verdict", "B answer", "B verdict", "Comparison")]
     for (board, title), pair in groupby(cells, key=lambda c: c[:2]):
         states, columns = {}, []

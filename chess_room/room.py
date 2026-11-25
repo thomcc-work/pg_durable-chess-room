@@ -43,8 +43,8 @@ def board_svg(board: chess.Board) -> str:
 
 def pgn(db, g: game.Game) -> str:
     record = chess.pgn.Game.from_board(game.replay(g, game.moves(db, g)))
-    created, = db.execute("SELECT created_at FROM mate.game WHERE id=%s", (g.id,)).fetchone()
-    record.headers.update(Event=f"Durable Chess / Game {g.id}", Site="Local board", Date=created.strftime("%Y.%m.%d"),
+    created, = db.execute("SELECT created_at FROM chess_room.game WHERE id=%s", (g.id,)).fetchone()
+    record.headers.update(Event=f"The Chess Room / Game {g.id}", Site="Local board", Date=created.strftime("%Y.%m.%d"),
                           White="Human", Black=g.engine, Result=g.result)
     return str(record) + "\n"
 
@@ -66,7 +66,7 @@ class EngineWorker(threading.Thread):
                         print("Game worker reconnected.", file=sys.stderr)
                     offline = False
                     while not self.stop_event.is_set():
-                        pending = db.execute("SELECT id,phase FROM mate.game WHERE phase IN ('submitted','closing') "
+                        pending = db.execute("SELECT id,phase FROM chess_room.game WHERE phase IN ('submitted','closing') "
                                              "OR (phase='engine' AND NOT engine_paused) ORDER BY id").fetchall()
                         for gid, phase in pending:
                             failed_phase, retry = retry_at.get(gid, ("", 0))
@@ -171,7 +171,7 @@ class BoardHandler(BaseHTTPRequestHandler):
             return
         with cluster.connect() as db:
             if path == "/api/games":
-                games = db.execute("SELECT id,title,ply,result FROM mate.game ORDER BY id DESC LIMIT 50").fetchall()
+                games = db.execute("SELECT id,title,ply,result FROM chess_room.game ORDER BY id DESC LIMIT 50").fetchall()
                 self.respond(200, {"games": [{"id": i, "title": t, "ply": p, "result": r} for i, t, p, r in games],
                                    "engine": self.server.opponent_name})
                 return
@@ -246,7 +246,7 @@ def serve(port: int) -> None:
         worker = EngineWorker(engine)
         with BoardServer(port, worker) as server:
             worker.start()
-            print(f"Durable Chess / {engine.id['name']}: http://127.0.0.1:{server.server_port}", flush=True)
+            print(f"The Chess Room / {engine.id['name']}: http://127.0.0.1:{server.server_port}", flush=True)
             try:
                 server.serve_forever()
             except KeyboardInterrupt:

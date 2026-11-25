@@ -1,4 +1,4 @@
-# Mate in One: compare two prompts
+# The Chess Room: prompt evaluator
 
 Which positions does B solve that A misses, and where does it regress?
 Python freezes both prompts, accepted mating moves, deployment and settings

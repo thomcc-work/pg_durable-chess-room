@@ -1,6 +1,6 @@
 import unittest
 
-from mate.evaluation import canned_reply, comparison, grade, prompt
+from chess_room.evaluation import canned_reply, comparison, grade, prompt
 
 
 class EvaluationTests(unittest.TestCase):

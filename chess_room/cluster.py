@@ -9,9 +9,9 @@ from pathlib import Path
 import psycopg
 
 ROOT = Path(__file__).resolve().parents[1]
-STATE = ROOT / ".mate"
+STATE = ROOT / ".chess-room"
 DATA = STATE / "data"
-MARKER = STATE / "mate-bindir"
+MARKER = STATE / "pg-bindir"
 LOG = STATE / "server.log"
 PORT = "55437"
 
@@ -30,12 +30,12 @@ def bindir() -> Path:
     return Path(MARKER.read_text().strip())
 
 
-def connect(user: str = "mate_app") -> psycopg.Connection:
+def connect(user: str = "chess_room_app") -> psycopg.Connection:
     bindir()  # Refuse a socket in a directory the applet did not initialize.
     return psycopg.connect(host=str(STATE), port=PORT, dbname="postgres", user=user, autocommit=True)
 
 
-def psql(args: list[str], user: str = "mate_app") -> None:
+def psql(args: list[str], user: str = "chess_room_app") -> None:
     subprocess.run([bindir() / "psql", "-X", "-v", "ON_ERROR_STOP=1", "-P", "pager=off",
                     "-U", user, *args], check=True)
 
@@ -80,9 +80,9 @@ def init() -> None:
     pg_ctl("start")
     with connect("postgres") as db:
         db.execute("CREATE EXTENSION pg_durable")
-        db.execute("CREATE ROLE mate_app LOGIN")
-        db.execute("SELECT df.grant_usage('mate_app')")
-        db.execute("CREATE SCHEMA mate AUTHORIZATION mate_app")
+        db.execute("CREATE ROLE chess_room_app LOGIN")
+        db.execute("SELECT df.grant_usage('chess_room_app')")
+        db.execute("CREATE SCHEMA chess_room AUTHORIZATION chess_room_app")
     wait_for_worker()
     with connect() as db:
         db.execute((ROOT / "sql/schema.sql").read_text())

@@ -11,7 +11,7 @@ from .experiment import board_numbers, finish, finish_pair, get_run, launch_pair
 def early_attempts(db: Connection, run_id: int, mid: int) -> list[tuple]:
     return db.execute("""
         SELECT c.board, c.variant, c.instance, a.attempt, c.http_status, md5(c.body)
-        FROM mate.cell c JOIN mate.fixture_attempt a ON a.cell_id=c.id
+        FROM chess_room.cell c JOIN chess_room.fixture_attempt a ON a.cell_id=c.id
         WHERE c.run_id=%s AND c.board<=%s ORDER BY board, variant, attempt
     """, (run_id, mid)).fetchall()
 
@@ -32,7 +32,7 @@ def demo(count: int | None) -> None:
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             waiting, = db.execute("""
-                SELECT count(*) FROM mate.cell c, df.instance_nodes(c.instance) n
+                SELECT count(*) FROM chess_room.cell c, df.instance_nodes(c.instance) n
                 WHERE c.run_id=%s AND c.board IN (%s,%s)
                 AND n.node_type='SLEEP' AND n.inferred_status='running'
             """, (run.id, mid, following)).fetchone()
@@ -41,7 +41,7 @@ def demo(count: int | None) -> None:
             time.sleep(0.2)
         else:
             raise TimeoutError("Did not observe both pairs at their durable timers; not restarting")
-        recorded, = db.execute("SELECT count(body) FROM mate.cell WHERE run_id=%s", (run.id,)).fetchone()
+        recorded, = db.execute("SELECT count(body) FROM chess_room.cell WHERE run_id=%s", (run.id,)).fetchone()
         if recorded != 2 * cut:
             raise ValueError(f"Missed restart window: {recorded} recorded responses")
         before = early_attempts(db, run.id, mid)
@@ -60,7 +60,7 @@ def demo(count: int | None) -> None:
         receipts = db.execute("""
             SELECT c.id, c.board, c.verdict, df.status(c.instance), a.attempt,
                    a.received_at >= pg_postmaster_start_time()
-            FROM mate.cell c LEFT JOIN mate.fixture_attempt a ON a.cell_id=c.id WHERE c.run_id=%s
+            FROM chess_room.cell c LEFT JOIN chess_room.fixture_attempt a ON a.cell_id=c.id WHERE c.run_id=%s
         """, (run.id,)).fetchall()
         if (len(receipts) != 2 * len(boards) or len({r[0] for r in receipts}) != len(receipts)
                 or any(not verdict or state != "completed" or attempt is None or (board > mid and not later)

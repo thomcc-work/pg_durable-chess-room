@@ -10,14 +10,14 @@ HTTP access and bind a foreign server to the authorized resource:
 
 ```sql
 SHOW pg_durable.http_security;  -- leave at restricted
-SELECT df.grant_usage('mate_app', include_http => true);
-CREATE SERVER mate_chat FOREIGN DATA WRAPPER pg_durable_fdw
+SELECT df.grant_usage('chess_room_app', include_http => true);
+CREATE SERVER chess_room_chat FOREIGN DATA WRAPPER pg_durable_fdw
     OPTIONS (base_url 'https://YOUR-RESOURCE.openai.azure.com',
              auth_scheme 'header', header_name 'api-key');
-GRANT USAGE ON FOREIGN SERVER mate_chat TO mate_app;
+GRANT USAGE ON FOREIGN SERVER chess_room_chat TO chess_room_app;
 ```
 
-Use your trusted provisioning process to create **`mate_app`'s own mapping**
+Use your trusted provisioning process to create **`chess_room_app`'s own mapping**
 on that server with the `header_value` option. For the DDL and rotation
 procedure see **Endpoint Credential Catalog** in your installed version's
 [`USER_GUIDE.md`](https://github.com/microsoft/pg_durable/blob/main/USER_GUIDE.md#endpoint-credential-catalog).
@@ -30,8 +30,8 @@ login or HTTP policy change is necessary for the fixture demo.
 
 ```bash
 run=$(uv run -m chess_room new-live YOUR-DEPLOYMENT 1)  # snapshot only; no network
-uv run -m chess_room psql -c "SELECT provider, base_url, deployment, api_version, settings FROM mate.run WHERE id = $run"
-uv run -m chess_room psql -c "SELECT variant, prompt FROM mate.cell WHERE run_id = $run"
+uv run -m chess_room psql -c "SELECT provider, base_url, deployment, api_version, settings FROM chess_room.run WHERE id = $run"
+uv run -m chess_room psql -c "SELECT variant, prompt FROM chess_room.cell WHERE run_id = $run"
 uv run -m chess_room finish "$run"                      # sends the two requests
 ```
 
@@ -48,7 +48,7 @@ chess miss. Inspect it without starting a replacement:
 
 ```sql
 SELECT board, variant, instance, http_status, body, verdict, i.status, i.output
-FROM mate.cell c LEFT JOIN LATERAL df.instance_info(c.instance) i ON true
+FROM chess_room.cell c LEFT JOIN LATERAL df.instance_info(c.instance) i ON true
 WHERE run_id = 1 AND c.instance IS NOT NULL ORDER BY board, variant; -- use your run ID
 ```
 

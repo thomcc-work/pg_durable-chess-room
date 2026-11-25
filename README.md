@@ -5,7 +5,7 @@ answers, and come back to the same board. Even if the browser resends your
 move, it appears on the scoresheet only once.
 
 This is the playable version of the [durable chess game pitch](https://gist.github.com/thomcc-work/1e2371e7cfa29974f190a296c3b5d568#6-a-durable-chess-game).
-There is also a separate [Mate in One prompt evaluator](EVALUATOR.md) for
+There is also a [Chess Room prompt evaluator](EVALUATOR.md) for
 comparing two prompts on a dozen positions; it does not need Stockfish.
 
 ## Start a private cluster
@@ -20,11 +20,11 @@ export PG_CONFIG="$HOME/.pgrx/17.11/pgrx-install/bin/pg_config"
 ```
 
 On a fresh checkout, run `uv run -m chess_room init`. If you already have a
-stopped `.mate/`, run `uv run -m chess_room start` instead. Existing games and
-evaluator runs keep their IDs. `uv run -m mate` remains an alias for existing
-scripts. `init` refuses to overwrite saved data.
+stopped `.chess-room/` cluster, run `uv run -m chess_room start` instead.
+`init` creates a new cluster; it does not import earlier installations or
+overwrite saved data.
 The server accepts no TCP connections and keeps its Unix socket, log and
-data in this checkout's private `.mate/` directory.
+data in this checkout's private `.chess-room/` directory.
 
 ## Play
 
@@ -85,7 +85,7 @@ No server's HTTP policy has to be relaxed for the engine.
 
 Stop the room with **Ctrl-C**, then use `uv run -m chess_room stop` to stop
 Postgres without deleting anything. To discard all applet data, stop
-both first and remove only this checkout's `.mate/` directory.
+both first and remove only this checkout's `.chess-room/` directory.
 
 ## Checks
 

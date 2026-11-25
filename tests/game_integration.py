@@ -9,8 +9,8 @@ from uuid import uuid4
 
 import chess
 
-from mate import cluster, game, opponent
-from mate.game_demo import wait_until
+from chess_room import cluster, game, opponent
+from chess_room.game_demo import wait_until
 
 
 class DurableTurns(unittest.TestCase):

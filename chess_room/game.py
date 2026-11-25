@@ -44,13 +44,10 @@ class Ply:
 
 
 def install(db: Connection) -> None:
-    # Also upgrades a retained evaluator database, without touching its tables.
     with db.transaction():
         db.execute("SELECT pg_advisory_xact_lock(17422, 1)")
-        if db.execute("SELECT to_regclass('mate.game_move')").fetchone() == (None,):
+        if db.execute("SELECT to_regclass('chess_room.game_move')").fetchone() == (None,):
             db.execute((ROOT / "sql/game.sql").read_text())
-        else:
-            db.execute("ALTER TABLE mate.game ADD COLUMN IF NOT EXISTS engine_paused boolean NOT NULL DEFAULT false")
 
 
 def presets() -> dict[str, tuple[str, str]]:
@@ -68,21 +65,21 @@ def create(db: Connection, engine: str, preset: str = "standard", *, hold_engine
     except KeyError:
         raise ValueError("Unknown starting position") from None
     with db.transaction():
-        game_id, = db.execute("INSERT INTO mate.game(title,engine,start_fen,fen,engine_paused) "
+        game_id, = db.execute("INSERT INTO chess_room.game(title,engine,start_fen,fen,engine_paused) "
                               "VALUES (%s,%s,%s,%s,%s) RETURNING id", (title, engine, fen, fen, hold_engine)).fetchone()
-        release = (f"UPDATE mate.game SET phase=CASE phase WHEN 'submitted' THEN 'engine' "
+        release = (f"UPDATE chess_room.game SET phase=CASE phase WHEN 'submitted' THEN 'engine' "
                    f"ELSE 'finished' END WHERE id={game_id} AND phase IN ('submitted','closing')")
-        ongoing = f"SELECT phase <> 'finished' FROM mate.game WHERE id={game_id}"
-        db.execute("""UPDATE mate.game SET instance=df.start(df.loop(
+        ongoing = f"SELECT phase <> 'finished' FROM chess_room.game WHERE id={game_id}"
+        db.execute("""UPDATE chess_room.game SET instance=df.start(df.loop(
                         df.wait_for_signal('turn') ~> df.sql(%s), df.sql(%s)), %s) WHERE id=%s""",
-                   (release, ongoing, f"chess/{game_id}", game_id))
+                   (release, ongoing, f"chess-room/game/{game_id}", game_id))
     return game_id
 
 
 def get(db: Connection, game_id: int, *, lock: bool = False) -> Game:
     with db.cursor(row_factory=class_row(Game)) as cur:
         game = cur.execute("SELECT id,instance,title,engine,engine_paused,start_fen,fen,ply,phase,result,reason "
-                           "FROM mate.game WHERE id=%s" + (" FOR UPDATE" if lock else ""), (game_id,)).fetchone()
+                           "FROM chess_room.game WHERE id=%s" + (" FOR UPDATE" if lock else ""), (game_id,)).fetchone()
     if game is None:
         raise NoGame(f"No game {game_id}")
     return game
@@ -90,7 +87,7 @@ def get(db: Connection, game_id: int, *, lock: bool = False) -> Game:
 
 def moves(db: Connection, game: Game) -> list[Ply]:
     with db.cursor(row_factory=class_row(Ply)) as cur:
-        return cur.execute("SELECT ply,actor,uci,san,request_id FROM mate.game_move WHERE game_id=%s "
+        return cur.execute("SELECT ply,actor,uci,san,request_id FROM chess_room.game_move WHERE game_id=%s "
                            "AND ply<=%s ORDER BY ply", (game.id, game.ply)).fetchall()
 
 
@@ -108,9 +105,9 @@ def record(db: Connection, game: Game, board: chess.Board, move: chess.Move, req
     board.push(move)
     outcome = board.outcome()  # Automatic draws only: keep the real move stack for fivefold repetition.
     phase = "closing" if outcome else ("submitted" if request else "human")
-    db.execute("INSERT INTO mate.game_move(game_id,ply,actor,uci,san,request_id) VALUES (%s,%s,%s,%s,%s,%s)",
+    db.execute("INSERT INTO chess_room.game_move(game_id,ply,actor,uci,san,request_id) VALUES (%s,%s,%s,%s,%s,%s)",
                (game.id, game.ply + 1, "human" if request else "engine", move.uci(), san, request))
-    db.execute("UPDATE mate.game SET ply=ply+1, fen=%s, phase=%s, result=%s, reason=%s WHERE id=%s",
+    db.execute("UPDATE chess_room.game SET ply=ply+1, fen=%s, phase=%s, result=%s, reason=%s WHERE id=%s",
                (board.fen(), phase, outcome.result() if outcome else "*",
                 outcome.termination.name.lower().replace("_", " ") if outcome else None, game.id))
 
@@ -119,7 +116,7 @@ def submit(db: Connection, game_id: int, expected_ply: int, uci: str, request: U
     """Return False for an exact retry, including after subsequent turns."""
     with db.transaction():
         game = get(db, game_id, lock=True)
-        old = db.execute("SELECT ply,uci FROM mate.game_move WHERE game_id=%s AND request_id=%s",
+        old = db.execute("SELECT ply,uci FROM chess_room.game_move WHERE game_id=%s AND request_id=%s",
                          (game_id, request)).fetchone()
         if old is not None:
             if old != (expected_ply + 1, uci):
@@ -154,7 +151,7 @@ def resign(db: Connection, game_id: int, expected_ply: int) -> None:
             return
         if g.ply != expected_ply or g.result != "*":
             raise MoveConflict("The position has changed; check the board before resigning")
-        db.execute("UPDATE mate.game SET phase='closing', result='0-1', reason='resignation' WHERE id=%s",
+        db.execute("UPDATE chess_room.game SET phase='closing', result='0-1', reason='resignation' WHERE id=%s",
                    (game_id,))
 
 
@@ -163,4 +160,4 @@ def hold_engine(db: Connection, game_id: int, paused: bool) -> None:
         g = get(db, game_id, lock=True)
         if g.result != "*":
             raise MoveConflict("This game has ended")
-        db.execute("UPDATE mate.game SET engine_paused=%s WHERE id=%s", (paused, game_id))
+        db.execute("UPDATE chess_room.game SET engine_paused=%s WHERE id=%s", (paused, game_id))

@@ -1,6 +1,6 @@
-# Mate in One: fixture run 9
+# The Chess Room: sample prompt scorecard
 
-PostgreSQL 17.11, pg_durable 0.2.9, 2026-11-25. These are **canned
+Fixture run 1 on PostgreSQL 17.11, pg_durable 0.2.9, 2026-11-25. These are **canned
 answers**, not measurements from a model. Both prompts requested one move
 in lowercase coordinate notation. B also asked the model to check that
 the opponent had no legal reply.
@@ -38,10 +38,10 @@ At the boundary:
 
 | Board / prompt | Workflow ID | Fixture attempt ID | Request received | Graded |
 |---|---|---:|---|---|
-| 6 / A | `3241d688` | 75 | before restart | after restart |
-| 6 / B | `9e71d395` | 76 | before restart | after restart |
-| 7 / A | `c8bbee86` | 78 | after restart | after restart |
-| 7 / B | `5fb17a6e` | 77 | after restart | after restart |
+| 6 / A | `268ddd96` | 11 | before restart | after restart |
+| 6 / B | `163da483` | 12 | before restart | after restart |
+| 7 / A | `37a87de6` | 13 | after restart | after restart |
+| 7 / B | `23ff38c3` | 14 | after restart | after restart |
 
 The malformed answer and 429 were also fixtures; the run made no HTTP
 requests and did not retry the rate limit. Nothing here establishes how
