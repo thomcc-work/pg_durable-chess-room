@@ -4,9 +4,7 @@ Play White against Stockfish. Make a move, restart Postgres before Black
 answers, and come back to the same board. Even if the browser resends your
 move, it appears on the scoresheet only once.
 
-This is the playable version of the [durable chess game pitch](https://gist.github.com/thomcc-work/1e2371e7cfa29974f190a296c3b5d568#6-a-durable-chess-game).
-There is also a [Chess Room prompt evaluator](EVALUATOR.md) for
-comparing two prompts on a dozen positions; it does not need Stockfish.
+This is the playable version of a durable chess game. There is also a [Chess Room prompt evaluator](EVALUATOR.md) for comparing two prompts on a dozen positions; it does not need Stockfish.
 
 ## Start a private cluster
 
