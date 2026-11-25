@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>The Chess Room · Durable Chess</title>
+  <link rel="icon" href="/knight.svg" type="image/svg+xml"><link rel="stylesheet" href="/room.css">
+  <script type="module" src="/room.js"></script>
+</head>
+<body>
+  <header class="mast"><a href="/" class="brand"><span class="stamp" aria-hidden="true">♞</span> The Chess Room</a>
+    <span class="tag"><i></i> LOCAL BOARD</span></header>
+  <main>
+    <div class="heading"><div><p class="eyebrow">HUMAN &nbsp;/&nbsp; ENGINE</p><h1 id="title">Take a seat.</h1></div>
+      <button class="primary" id="new">New game <span aria-hidden="true">＋</span></button></div>
+    <div class="layout">
+      <section aria-label="Chessboard" class="playarea">
+        <div class="player"><span class="token black"></span><strong id="engine">Stockfish</strong><small>BLACK</small></div>
+        <div class="board-frame"><div class="ranks" aria-hidden="true"><b>8</b><b>7</b><b>6</b><b>5</b><b>4</b><b>3</b><b>2</b><b>1</b></div>
+          <div class="board"><img id="drawing" src="/opening.svg" alt="Chessboard, White at the bottom">
+            <div id="squares" role="group" aria-label="Board squares"></div></div>
+          <div class="files" aria-hidden="true"><b>a</b><b>b</b><b>c</b><b>d</b><b>e</b><b>f</b><b>g</b><b>h</b></div>
+        </div>
+        <div class="player"><span class="token white"></span><strong>You</strong><small>WHITE</small></div>
+        <p id="hint" class="hint">Start a game or return to a saved board.</p>
+      </section>
+      <aside>
+        <section class="card status"><p class="eyebrow">AT THE BOARD</p><h2 id="turn" aria-live="polite">Welcome, White.</h2>
+          <p id="summary">Play the local engine. Leave between moves; the position stays here.</p>
+          <form id="move-form" hidden><label for="uci">Or enter a coordinate move</label>
+            <div class="row"><input id="uci" maxlength="5" placeholder="e2e4" autocomplete="off" spellcheck="false"><button>Move</button></div></form>
+          <p id="notice" role="status"></p>
+          <button id="pending" hidden>Retry unconfirmed move</button>
+        </section>
+        <section class="card" id="score"><div class="card-head"><h2>Scoresheet</h2><a id="pgn" hidden>Save PGN ↓</a></div>
+          <div id="history"><p class="muted">Moves will appear here in pairs.</p></div>
+          <button id="live" hidden>Return to live board</button>
+        </section>
+        <section class="card"><label for="saved" class="eyebrow">SAVED GAMES</label><select id="saved"><option value="">Choose a board…</option></select></section>
+        <details class="card" id="receipt" hidden><summary>Durable turn receipt</summary><dl>
+          <dt>Workflow</dt><dd id="instance"></dd><dt>Position (FEN)</dt><dd id="fen"></dd>
+          <dt>Last White request</dt><dd id="key"></dd></dl>
+          <button id="hold">Hold engine reply</button>
+          <button id="retry">Resend last move</button> <button id="resign">Resign</button>
+        </details>
+      </aside>
+    </div>
+  </main>
+  <footer>THE CHESS ROOM <span>Python chess rules · Stockfish · pg_durable</span></footer>
+  <dialog id="setup"><form method="dialog"><p class="eyebrow">A NEW BOARD</p><h2>Where shall we start?</h2>
+    <label for="preset">Starting position</label><select id="preset">
+      <option value="standard">Standard opening</option><option value="puzzle-1">Rook on the h-file · mate in one</option>
+      <option value="puzzle-5">Rook underpromotion · mate in one</option></select>
+    <p>You play White. There is no clock.</p><div class="row"><button value="cancel">Cancel</button>
+      <button type="button" id="create" class="primary">Play White</button></div><p id="setup-error" role="alert"></p>
+  </form></dialog>
+  <dialog id="promotion"><p class="eyebrow">PROMOTION</p><h2>Choose your piece.</h2>
+    <div id="choices"></div><button id="cancel-promotion">Cancel</button></dialog>
+  <dialog id="confirm-resign"><form method="dialog"><h2>Resign this game?</h2><p>The moves and final position will remain saved.</p>
+    <div class="row"><button value="cancel">Keep playing</button><button type="button" id="do-resign">Resign game</button></div></form></dialog>
+</body>
+</html>

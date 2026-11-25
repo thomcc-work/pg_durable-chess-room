@@ -1,6 +1,6 @@
 # Compare an already-authorized Azure chat deployment
 
-Skip this page for the fixture demo. A live run sends the two prompts and
+Skip this page for the [fixture demo](EVALUATOR.md). A live run sends the two prompts and
 the FENs to your deployment and can incur charges. Start with one board
 (two calls). Use a deployment that accepts Chat Completions API
 `2024-10-21`, `temperature: 0`, `n: 1`, and `max_tokens: 32`.

@@ -25,6 +25,7 @@ class Game:
     instance: str
     title: str
     engine: str
+    engine_paused: bool
     start_fen: str
     fen: str
     ply: int
@@ -48,6 +49,8 @@ def install(db: Connection) -> None:
         db.execute("SELECT pg_advisory_xact_lock(17422, 1)")
         if db.execute("SELECT to_regclass('mate.game_move')").fetchone() == (None,):
             db.execute((ROOT / "sql/game.sql").read_text())
+        else:
+            db.execute("ALTER TABLE mate.game ADD COLUMN IF NOT EXISTS engine_paused boolean NOT NULL DEFAULT false")
 
 
 def presets() -> dict[str, tuple[str, str]]:
@@ -59,14 +62,14 @@ def presets() -> dict[str, tuple[str, str]]:
     return result
 
 
-def create(db: Connection, engine: str, preset: str = "standard") -> int:
+def create(db: Connection, engine: str, preset: str = "standard", *, hold_engine: bool = False) -> int:
     try:
         title, fen = presets()[preset]
     except KeyError:
         raise ValueError("Unknown starting position") from None
     with db.transaction():
-        game_id, = db.execute("INSERT INTO mate.game(title,engine,start_fen,fen) VALUES (%s,%s,%s,%s) "
-                              "RETURNING id", (title, engine, fen, fen)).fetchone()
+        game_id, = db.execute("INSERT INTO mate.game(title,engine,start_fen,fen,engine_paused) "
+                              "VALUES (%s,%s,%s,%s,%s) RETURNING id", (title, engine, fen, fen, hold_engine)).fetchone()
         release = (f"UPDATE mate.game SET phase=CASE phase WHEN 'submitted' THEN 'engine' "
                    f"ELSE 'finished' END WHERE id={game_id} AND phase IN ('submitted','closing')")
         ongoing = f"SELECT phase <> 'finished' FROM mate.game WHERE id={game_id}"
@@ -78,7 +81,7 @@ def create(db: Connection, engine: str, preset: str = "standard") -> int:
 
 def get(db: Connection, game_id: int, *, lock: bool = False) -> Game:
     with db.cursor(row_factory=class_row(Game)) as cur:
-        game = cur.execute("SELECT id,instance,title,engine,start_fen,fen,ply,phase,result,reason "
+        game = cur.execute("SELECT id,instance,title,engine,engine_paused,start_fen,fen,ply,phase,result,reason "
                            "FROM mate.game WHERE id=%s" + (" FOR UPDATE" if lock else ""), (game_id,)).fetchone()
     if game is None:
         raise NoGame(f"No game {game_id}")
@@ -137,6 +140,27 @@ def wake(db: Connection, game: Game) -> None:
     # not the signal payload, is the work; the worker nudges again until it changes.
     state, = db.execute("SELECT df.status(%s)", (game.instance,)).fetchone()
     if state in ("failed", "cancelled", "completed"):
+        if state == "completed" and get(db, game.id).phase == "finished":
+            return
         reason = db.execute("SELECT output FROM df.instance_info(%s)", (game.instance,)).fetchone()
         raise RuntimeError(f"Game {game.id}: workflow {game.instance} is {state}: {reason}")
     db.execute("SELECT df.signal(%s, 'turn')", (game.instance,))
+
+
+def resign(db: Connection, game_id: int, expected_ply: int) -> None:
+    with db.transaction():
+        g = get(db, game_id, lock=True)
+        if g.reason == "resignation":
+            return
+        if g.ply != expected_ply or g.result != "*":
+            raise MoveConflict("The position has changed; check the board before resigning")
+        db.execute("UPDATE mate.game SET phase='closing', result='0-1', reason='resignation' WHERE id=%s",
+                   (game_id,))
+
+
+def hold_engine(db: Connection, game_id: int, paused: bool) -> None:
+    with db.transaction():
+        g = get(db, game_id, lock=True)
+        if g.result != "*":
+            raise MoveConflict("This game has ended")
+        db.execute("UPDATE mate.game SET engine_paused=%s WHERE id=%s", (paused, game_id))

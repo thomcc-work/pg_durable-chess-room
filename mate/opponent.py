@@ -35,7 +35,7 @@ def reply(db: Connection, engine: chess.engine.SimpleEngine, game: Game) -> bool
     with db.transaction():
         current = get(db, game.id, lock=True)
         # A search may repeat after a crash or in another worker; only one reply can commit.
-        if current.phase != "engine" or current.ply != game.ply:
+        if current.engine_paused or current.phase != "engine" or current.ply != game.ply:
             return False
         record(db, current, board, result.move, None)
     return True
@@ -45,5 +45,5 @@ def advance(db: Connection, engine: chess.engine.SimpleEngine, game_id: int) -> 
     game = get(db, game_id)
     if game.phase in ("submitted", "closing"):
         wake(db, game)
-    elif game.phase == "engine":
+    elif game.phase == "engine" and not game.engine_paused:
         reply(db, engine, game)

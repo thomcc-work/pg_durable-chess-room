@@ -23,7 +23,7 @@ def demo() -> None:
     with opponent.open_engine() as engine:
         with cluster.connect() as db:
             game.install(db)
-            game_id = game.create(db, engine.id["name"])
+            game_id = game.create(db, engine.id["name"], hold_engine=True)
             key = uuid4()
             if not game.submit(db, game_id, 0, "e2e4", key):
                 raise RuntimeError("Fresh request unexpectedly classified as a retry")
@@ -41,6 +41,7 @@ def demo() -> None:
                 raise RuntimeError("Game, position or move receipts did not survive restart unchanged")
             if game.submit(db, game_id, 0, "e2e4", key):
                 raise RuntimeError("Retry of 1. e4 was applied twice")
+            game.hold_engine(db, game_id, False)
             current = wait_until(db, engine, game_id, "human")
             if current.ply != 2 or game.submit(db, game_id, 0, "e2e4", key):
                 raise RuntimeError("Expected one White move and one engine reply")
@@ -53,6 +54,6 @@ def demo() -> None:
             game.replay(final, line)
             if [m.actor for m in line] != ["human", "engine", "human", "engine"] or final.instance != before.instance:
                 raise RuntimeError("Expected two full turns in the original workflow")
-            print(f"Same FEN after restart; both retries returned the original receipt.\n"
+            print(f"Same FEN after restart; both retries recognized the recorded move.\n"
                   f"1. {line[0].san} {line[1].san} 2. {line[2].san} {line[3].san}\n"
                   f"Game {game_id} is ready for White on ply {final.ply}; workflow {final.instance}.")

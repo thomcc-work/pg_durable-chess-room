@@ -1,102 +1,99 @@
-# Mate in One
+# The Chess Room
 
-Compare two prompts on the same chess position: which one finds a mate, and
-which merely gives check? The Python app freezes the inputs, grades the answers,
-and prints them side by side. pg_durable runs each request and records its
-reply on a disposable local PostgreSQL cluster. No shared database is needed.
+Play White against Stockfish. Make a move, restart Postgres before Black
+answers, and come back to the same board. Even if the browser resends your
+move, it appears on the scoresheet only once.
+
+This is the playable version of the [durable chess game pitch](https://gist.github.com/thomcc-work/1e2371e7cfa29974f190a296c3b5d568#6-a-durable-chess-game).
+There is also a separate [Mate in One prompt evaluator](EVALUATOR.md) for
+comparing two prompts on a dozen positions; it does not need Stockfish.
 
 ## Start a private cluster
 
-Use Linux, uv, Python 3.11+, and a PostgreSQL 17 installation with pg_durable 0.2.9 or
-newer installed. On the hackathon host, select that installation first:
+Use Linux, uv, Python 3.11+, and PostgreSQL 17 with pg_durable 0.2.9 or
+newer installed. Run these commands as a non-root user from this checkout.
+`pg_config` on `PATH` selects the installation unless you set `PG_CONFIG`.
+On the hackathon host, use:
 
 ```sh
 export PG_CONFIG="$HOME/.pgrx/17.11/pgrx-install/bin/pg_config"
 ```
 
-Elsewhere, `pg_config` on `PATH` is the default. As a non-root user, from
-this checkout:
+On a fresh checkout, run `uv run -m mate init`. If you already have a
+stopped `.mate/`, run `uv run -m mate start` instead. Existing games and
+evaluator runs keep their IDs. `init` refuses to overwrite saved data.
+The server accepts no TCP connections and keeps its Unix socket, log and
+data in this checkout's private `.mate/` directory.
+
+## Play
+
+Install Stockfish (e.g. the Debian `stockfish` package) or point `STOCKFISH`
+at its executable. The hackathon checkout already has a private copy.
 
 ```sh
-uv run -m mate init
-uv run -m mate new 2       # prints the new run ID
-uv run -m mate finish 1    # use the printed ID; 1 on a fresh cluster
+uv run -m mate play
 ```
 
-`init` refuses to overwrite an existing `.mate/`. The server accepts no TCP
-connections; its socket, data, and log are inside that private directory.
-The app submits workflows as `mate_app`, not `postgres`. Use
-`uv run -m mate stop` when done and `uv run -m mate start` to
-reopen the same data. To discard it, stop the cluster first, then remove this
-checkout's `.mate/` directory.
+Open **[the local board](http://127.0.0.1:8765/)**, choose **New game →
+Play White**, select a piece, then a highlighted destination. You can also
+type `e2e4` or use the arrow keys and Enter on the board. Start from the
+opening for a full game, or try **Rook underpromotion** for a one-move
+finish. The game checks moves with python-chess; its SVG renderer draws
+the pieces and board. Black's replies come from the actual Stockfish
+process over UCI, not fixtures or a cloud endpoint.
 
-Already have a cluster from the shell prototype? Use `uv run -m mate start`,
-not `init`. The Python client uses the same tables and workflow IDs.
+Each game has a bookmarkable URL. Select a move on the scoresheet to review
+that position, **Return to live board** to keep playing, or **Save PGN**
+to take the game elsewhere. Games are untimed. Checkmate, stalemate,
+insufficient material, automatic repetition/move-count draws, and resignation
+end play. There are no accounts: this room is for a trusted local machine,
+not a public multiplayer server.
 
-## Interrupt the experiment
+## Restart in the middle of a turn
+
+1. In a new game, expand **Durable turn receipt**, choose **Hold engine
+   reply**, then play `e2e4`. The scoresheet shows `1. e4`. The receipt
+   shows the workflow ID, board position in FEN, and White's request ID.
+2. In another terminal run `uv run -m mate restart`. Only this applet's
+   cluster restarts. Reload the same game. The three receipt fields and
+   the scoresheet should be unchanged.
+3. Choose **Resend last move**. It acknowledges the duplicate without
+   adding a ply. Choose **Resume engine**: Black replies and it's your
+   turn again.
+
+`uv run -m mate game-demo` runs the same check automatically with a new game,
+even while the room is open. It verifies that the postmaster really changed,
+retries `e4` both before and after Black's reply, plays a second full turn,
+and leaves the board available in **Saved games**. In the browser test,
+workflow `2a5adcfb` held at `1. e4 e5 2. Nf3`, stayed at three plies after
+the restart and retry, then continued `2...Nc6`.
+
+### What is durable?
+
+There is one pg_durable workflow per game. It waits for a `turn` signal
+and releases a **committed** move to the engine worker. The signal is a
+wake-up, not the move itself: if the signal arrives too early the worker
+can send it again. Python validates the move and writes its request ID,
+history entry and new position in one transaction. A stale tab can't make
+a different move against an old position.
+
+Stockfish searches outside the database. A crash can repeat that search;
+its reply can commit only for the same game, phase and ply. The room
+reconnects after a database restart and picks up outstanding turns.
+No server's HTTP policy has to be relaxed for the engine.
+
+Stop the room with **Ctrl-C**, then use `uv run -m mate stop` to stop
+Postgres without deleting anything. To discard all applet data, stop
+both first and remove only this checkout's `.mate/` directory.
+
+## Checks
 
 ```sh
-uv run -m mate demo
+uv run python -m unittest discover -s tests
+# Requires a running applet cluster; creates test games. Run without the room worker.
+uv run python -m unittest discover -s tests -p '*_integration.py'
 ```
 
-This starts a new twelve-board **fixture** run and restarts **only this
-checkout's cluster** after 12 of 24 responses are on disk. Board 6 has two
-answers waiting to be graded. Board 7 has two workflows waiting to make
-their first request. A 15-second `df.sleep` at each boundary makes the
-interruption visible; there is no signal to send or job to recreate.
-pg_durable resumes those four instances. Python reconnects, grades their
-saved replies, and submits later boards one pair at a time.
-
-See the [sample scorecard and restart evidence](SCORECARD.md). The command
-prints the half-finished and final scorecards, compares every
-earlier fixture attempt ID, workflow ID and response digest, and checks
-that each remaining request arrived after the new server started. If the
-driver itself exits, `uv run -m mate finish RUN_ID` continues from the
-saved instance IDs. This demonstrates recovery of **recorded** answers.
-If an actual HTTP request reaches a provider but its reply is lost, a
-retry can still incur another charge.
-
-## Try the original human-versus-engine restart
-
-With the private cluster running, `uv run -m mate game-demo` creates a
-separate game against **real Stockfish**. Install the `stockfish` package
-(on Debian, `apt install stockfish`), or set `STOCKFISH` to a local UCI
-executable. No model credentials are needed. The command records `1. e4`,
-waits until the game's workflow releases Black to move, then restarts
-Postgres before the engine searches. It resubmits the same command twice
-and plays another full turn, checking the move history and workflow ID.
-The evaluator does not start or require Stockfish.
-
-## Read the comparison
-
-These are **fixtures, not model measurements**. On board 1, A returns `a2a8`.
-The rook checks along the eighth rank, but the black king can move to h7.
-B returns `a2h2`: the rook covers the h-file and the white king on f7 covers
-g7 and g8. On board 2 the result goes the other way. Use
-`uv run -m mate score RUN_ID` to revisit either comparison.
-
-Omit `2` from `new` for all twelve boards. On board 5 either a queen or a
-rook promotion is mate. Board 8 gives A a plausible chess answer in the
-wrong notation; board 9 gives B a canned HTTP 429. Neither is a chess miss,
-and neither stops board 10 from being evaluated.
-
-`new` freezes both exact prompts, FENs, accepted moves, and canned responses
-under a new run ID. `finish` starts one workflow per cell, one pair at a time.
-In a fixture run, each simulated request appends a row to
-`mate.fixture_attempt`. A subsequent workflow step stores the status, encoding
-and body. Only then does Python parse the reply and check it against the
-frozen answer key. A `miss` is a move in
-coordinate notation outside the accepted set, not a claim that it was legal.
-A bad answer, an invalid chat response and a non-2xx status get distinct verdicts.
-
-To send the prompts to an **already-authorized** Azure chat deployment,
-follow the [live run instructions](LIVE.md). `new` and `demo` never send HTTP.
-
-The [board key](data/boards.csv) contains **all** mating moves, not one
-preferred solution. To verify the key offline with the `chess==1.11.2` Python
-package installed, run `python3 scripts/check_boards.py`; alternatively,
-`uv run scripts/check_boards.py` installs the pinned checker. The experiment
-uses the stored answer keys, not an engine, to grade replies.
-
-To test the grader, prompts and comparisons without a database, run
-`uv run python -m unittest discover -s tests`.
+The opt-in tests cover concurrent retries, promotion, automatic draws,
+PGN export and a search finishing after resignation. Use `game-demo`
+for the real engine and actual restart.

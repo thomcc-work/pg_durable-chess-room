@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS mate.game (
     instance text UNIQUE,
     title text NOT NULL,
     engine text NOT NULL,
+    engine_paused boolean NOT NULL DEFAULT false,
     start_fen text NOT NULL,
     fen text NOT NULL,
     ply integer NOT NULL DEFAULT 0 CHECK (ply >= 0),

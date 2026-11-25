@@ -21,6 +21,8 @@ def main(argv: list[str]) -> None:
     for name in ("new", "demo"):
         cmd = commands.add_parser(name, help="snapshot fixtures" if name == "new" else "run the fixture restart demo")
         cmd.add_argument("boards", nargs="?", type=int, help="number of positions (default: all)")
+    room = commands.add_parser("play", help="open the local human-versus-Stockfish game room")
+    room.add_argument("--port", type=int, default=8765)
     live = commands.add_parser("new-live", help="snapshot prompts for an authorized deployment; no network")
     live.add_argument("deployment")
     live.add_argument("boards", nargs="?", type=int, default=1)
@@ -42,6 +44,9 @@ def main(argv: list[str]) -> None:
     elif args.command == "game-demo":
         from .game_demo import demo
         demo()
+    elif args.command == "play":
+        from .room import serve
+        serve(args.port)
     else:
         with cluster.connect() as db:
             if args.command in ("new", "new-live"):

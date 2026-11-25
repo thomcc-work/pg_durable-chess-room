@@ -45,5 +45,5 @@ At the boundary:
 
 The malformed answer and 429 were also fixtures; the run made no HTTP
 requests and did not retry the rate limit. Nothing here establishes how
-often a real provider bills a request lost in flight. [Replay the demo](README.md#interrupt-the-experiment)
+often a real provider bills a request lost in flight. [Replay the demo](EVALUATOR.md#interrupt-the-experiment)
 to see the checkpoint and inspect your own attempt IDs.

@@ -4,9 +4,13 @@ import threading
 import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 from uuid import uuid4
 
-from mate import cluster, game
+import chess
+
+from mate import cluster, game, opponent
+from mate.game_demo import wait_until
 
 
 class DurableTurns(unittest.TestCase):
@@ -55,3 +59,36 @@ class DurableTurns(unittest.TestCase):
             g = game.get(db, gid)
             self.assertEqual((g.result, g.reason), ("1-0", "checkmate"))
             self.assertTrue(game.replay(g, game.moves(db, g)).is_checkmate())
+
+    def test_restored_history_adjudicates_fivefold_repetition(self):
+        # Script both knights to revisit the opening position. FEN alone cannot count repetitions.
+        def knight_reply(board, limit, game):
+            uci = "g8f6" if board.piece_at(chess.G8) else "f6g8"
+            return SimpleNamespace(move=chess.Move.from_uci(uci))
+
+        engine = SimpleNamespace(id={"name": "scripted knights"}, play=knight_reply)
+        with cluster.connect() as db:
+            gid = game.create(db, engine.id["name"])
+            for i in range(8):
+                game.submit(db, gid, 2*i, "g1f3" if i % 2 == 0 else "f3g1", uuid4())
+                wait_until(db, engine, gid, "finished" if i == 7 else "human")
+            g = game.get(db, gid)
+            self.assertEqual((g.ply, g.result, g.reason), (16, "1/2-1/2", "fivefold repetition"))
+            self.assertEqual(db.execute("SELECT df.await_instance(%s,10)", (g.instance,)).fetchone(), ("completed",))
+
+    def test_search_cannot_resurrect_a_resigned_game(self):
+        with cluster.connect() as db:
+            gid = game.create(db, "scripted reply", hold_engine=True)
+            game.submit(db, gid, 0, "e2e4", uuid4())
+            # A second tab resigns after search starts but before the reply is recorded.
+            def resign_during_search(board, limit, **kwargs):
+                with cluster.connect() as other:
+                    game.resign(other, gid, 1)
+                return SimpleNamespace(move=chess.Move.from_uci("e7e5"))
+
+            engine = SimpleNamespace(id={"name": "scripted reply"}, play=resign_during_search)
+            wait_until(db, engine, gid, "engine")
+            game.hold_engine(db, gid, False)
+            self.assertFalse(opponent.reply(db, engine, game.get(db, gid)))
+            final = wait_until(db, engine, gid, "finished")
+            self.assertEqual((final.ply, final.result, final.reason), (1, "0-1", "resignation"))
