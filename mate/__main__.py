@@ -4,7 +4,7 @@ import sys
 
 import psycopg
 
-from . import cluster
+from . import cluster, experiment, recovery
 
 
 def main(argv: list[str]) -> None:
@@ -17,17 +17,37 @@ def main(argv: list[str]) -> None:
         ("admin", "open the private cluster's admin console (accepts psql flags)"),
     ):
         commands.add_parser(name, help=help_text)
-    console = argv[:1] in (["psql"], ["admin"])
+    for name in ("new", "demo"):
+        cmd = commands.add_parser(name, help="snapshot fixtures" if name == "new" else "run the fixture restart demo")
+        cmd.add_argument("boards", nargs="?", type=int, help="number of positions (default: all)")
+    live = commands.add_parser("new-live", help="snapshot prompts for an authorized deployment; no network")
+    live.add_argument("deployment")
+    live.add_argument("boards", nargs="?", type=int, default=1)
+    for name in ("finish", "score"):
+        commands.add_parser(name, help=f"{name} a saved run").add_argument("run_id", type=int)
+    console = bool(argv) and argv[0] in ("psql", "admin")
     args = parser.parse_args(argv[:1] if console else argv)
     cluster.use_private_socket()
     if console:
         cluster.psql(argv[1:], "postgres" if args.command == "admin" else "mate_app")
     elif args.command == "init":
         cluster.init()
-    else:
+    elif args.command in ("start", "stop", "restart"):
         cluster.pg_ctl(args.command)
         if args.command != "stop":
             cluster.wait_for_worker()
+    elif args.command == "demo":
+        recovery.demo(args.boards)
+    else:
+        with cluster.connect() as db:
+            if args.command in ("new", "new-live"):
+                print(experiment.new_run(db, args.boards, getattr(args, "deployment", None)))
+            else:
+                run = experiment.get_run(db, args.run_id)
+                if args.command == "finish":
+                    experiment.finish(db, run)
+                else:
+                    experiment.scorecard(db, run)
 
 
 if __name__ == "__main__":

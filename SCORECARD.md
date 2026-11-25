@@ -1,4 +1,4 @@
-# Mate in One: fixture run 4
+# Mate in One: fixture run 9
 
 PostgreSQL 17.11, pg_durable 0.2.9, 2026-11-25. These are **canned
 answers**, not measurements from a model. Both prompts requested one move
@@ -31,16 +31,17 @@ escape. B's rook on e7 doesn't even give check.
 
 The driver stopped only the applet's cluster with 12 of 24 responses
 retained. Board 6 was recorded but ungraded; board 7 was submitted but
-had made no requests. The same run finished with one fixture attempt per
-cell. The earlier twelve attempt histories matched before and after.
+had made no requests. Python reconnected and graded the saved responses.
+The same run finished with one fixture attempt per cell. The earlier
+twelve attempt histories matched before and after.
 At the boundary:
 
 | Board / prompt | Workflow ID | Fixture attempt ID | Request received | Graded |
 |---|---|---:|---|---|
-| 6 / A | `e14ea7c0` | 43 | before restart | after restart |
-| 6 / B | `de5c0cba` | 44 | before restart | after restart |
-| 7 / A | `02e8c0cb` | 45 | after restart | after restart |
-| 7 / B | `22c8edee` | 46 | after restart | after restart |
+| 6 / A | `3241d688` | 75 | before restart | after restart |
+| 6 / B | `9e71d395` | 76 | before restart | after restart |
+| 7 / A | `c8bbee86` | 78 | after restart | after restart |
+| 7 / B | `5fb17a6e` | 77 | after restart | after restart |
 
 The malformed answer and 429 were also fixtures; the run made no HTTP
 requests and did not retry the rate limit. Nothing here establishes how

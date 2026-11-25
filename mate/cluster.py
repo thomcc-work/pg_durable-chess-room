@@ -31,6 +31,7 @@ def bindir() -> Path:
 
 
 def connect(user: str = "mate_app") -> psycopg.Connection:
+    bindir()  # Refuse a socket in a directory the applet did not initialize.
     return psycopg.connect(host=str(STATE), port=PORT, dbname="postgres", user=user, autocommit=True)
 
 

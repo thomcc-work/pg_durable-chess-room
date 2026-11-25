@@ -29,10 +29,10 @@ disposable, protected cluster. No provisioning of an Azure resource, new
 login or HTTP policy change is necessary for the fixture demo.
 
 ```bash
-run=$(./scripts/run.sh new-live YOUR-DEPLOYMENT 1)  # snapshot only; no network
+run=$(uv run -m mate new-live YOUR-DEPLOYMENT 1)    # snapshot only; no network
 uv run -m mate psql -c "SELECT provider, base_url, deployment, api_version, settings FROM mate.run WHERE id = $run"
 uv run -m mate psql -c "SELECT variant, prompt FROM mate.cell WHERE run_id = $run"
-./scripts/run.sh finish "$run"                      # sends the two requests
+uv run -m mate finish "$run"                        # sends the two requests
 ```
 
 The workflow uses `df.http(df.endpoint(...))`; pg_durable resolves the
@@ -47,10 +47,9 @@ without a response envelope. Such a cell shows `workflow_error`, not a
 chess miss. Inspect it without starting a replacement:
 
 ```sql
-SELECT board, variant, instance, http_status, body, state,
-       CASE WHEN state = 'workflow_error' THEN
-           (SELECT output FROM df.instance_info(c.instance)) END AS reason
-FROM mate.results c WHERE run_id = 1 ORDER BY board, variant; -- use your run ID
+SELECT board, variant, instance, http_status, body, verdict, i.status, i.output
+FROM mate.cell c LEFT JOIN LATERAL df.instance_info(c.instance) i ON true
+WHERE run_id = 1 AND c.instance IS NOT NULL ORDER BY board, variant; -- use your run ID
 ```
 
 The sample scorecard used no live deployment. Separately, we built these
