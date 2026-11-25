@@ -1,6 +1,7 @@
 """Exercise the local HTTP contract, using a mating position that needs no engine reply."""
 
 import io
+import http.client
 import json
 import threading
 import unittest
@@ -8,6 +9,7 @@ import urllib.error
 import urllib.request
 from types import SimpleNamespace
 from uuid import uuid4
+from unittest.mock import patch
 
 import chess.pgn
 
@@ -37,6 +39,26 @@ class BoardHTTP(unittest.TestCase):
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=5) as res:
             return json.load(res)
+
+    def test_default_port_host_and_same_origin(self):
+        # Exercise ordinary port-80 headers without binding a privileged port.
+        sock_port = self.server.server_port
+        with patch.object(self.server, "server_port", 80):
+            for method, host, origin, expected in (
+                ("GET", "127.0.0.1", None, 200), ("POST", "localhost:80", "http://localhost", 201),
+                ("POST", "127.0.0.1", "http://127.0.0.1:80", 201),
+                ("GET", "other.example", None, 403), ("POST", "localhost", "http://127.0.0.1", 403),
+            ):
+                with self.subTest(method=method, host=host, origin=origin):
+                    conn = http.client.HTTPConnection("127.0.0.1", sock_port, timeout=5)
+                    headers = {"Host": host, "Content-Type": "application/json"}
+                    if origin:
+                        headers["Origin"] = origin
+                    try:
+                        conn.request(method, "/api/games", json.dumps({"request": str(uuid4())}) if method == "POST" else None, headers)
+                        self.assertEqual(conn.getresponse().status, expected)
+                    finally:
+                        conn.close()
 
     def test_move_receipt_pgn_and_historical_board(self):
         gid = self.post("/api/games", {"preset": "puzzle-5"})["id"]

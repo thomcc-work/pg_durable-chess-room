@@ -122,13 +122,18 @@ class BoardHandler(BaseHTTPRequestHandler):
     def dispatch(self, post=False):
         host = self.headers.get("Host")
         port = self.server.server_port
+        if port == 80 and host in ("localhost", "127.0.0.1"):
+            host += ":80"
         if host not in (f"localhost:{port}", f"127.0.0.1:{port}"):
             self.respond(403, {"error": "Use the local board address printed at startup"})
             return
         target = urlsplit(self.path)
         try:
             if post:
-                if self.headers.get("Origin") not in (None, f"http://{host}"):
+                origins = {None, f"http://{host}"}
+                if port == 80:
+                    origins.add("http://" + host.removesuffix(":80"))
+                if self.headers.get("Origin") not in origins:
                     self.respond(403, {"error": "Use the same-origin board"})
                     return
                 size = int(self.headers.get("Content-Length", "0"))
