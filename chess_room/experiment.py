@@ -108,11 +108,16 @@ def launch_pair(db: Connection, run: Run, board: int, *, delay_request=False, de
                        (graph, f"chess-room/eval/{run.id}/{board}/{variant}", cell_id))
 
 
+def instance_retained(db: Connection, instance: str) -> bool:
+    # The local graph row is visible before asynchronous execution metadata is ready.
+    return db.execute("SELECT 1 FROM df.instances WHERE id=%s", (instance,)).fetchone() is not None
+
+
 def workflow_failure(db: Connection, cell_id: int, instance: str) -> str | None:
     info = db.execute("SELECT status, output FROM df.instance_info(%s)", (instance,)).fetchone()
     if info and info[0] in ("failed", "cancelled"):
         reason = info[1] or info[0]
-    elif not info and not db.execute("SELECT 1 FROM df.instances WHERE instance_id=%s", (instance,)).fetchone():
+    elif not info and not instance_retained(db, instance):
         reason = "Workflow history expired without a recorded response"
     else:
         return None
@@ -135,7 +140,7 @@ def finish_pair(db: Connection, run: Run, board: int) -> None:
                 state, = db.execute("SELECT df.await_instance(%s, 90)", (instance,)).fetchone()
             except psycopg.DatabaseError:
                 # Pruning can race the wait. Don't mask other failures or reissue the request.
-                if db.execute("SELECT 1 FROM df.instances WHERE instance_id=%s", (instance,)).fetchone():
+                if instance_retained(db, instance):
                     raise
                 state = "expired"
             if state not in ("completed", "failed", "cancelled", "expired"):
