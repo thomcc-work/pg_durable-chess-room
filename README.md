@@ -7,10 +7,16 @@ cluster with pg_durable. No shared database is needed.
 ## Start a private cluster
 
 Use Linux, Bash, and a PostgreSQL 17 installation with pg_durable 0.2.9 or
-newer installed. As a non-root user, from this checkout:
+newer installed. On the hackathon host, select that installation first:
 
 ```bash
-# Set PG_CONFIG if the desired installation is not first on PATH.
+export PG_CONFIG="$HOME/.pgrx/17.11/pgrx-install/bin/pg_config"
+```
+
+Elsewhere, `pg_config` on `PATH` is the default. As a non-root user, from
+this checkout:
+
+```bash
 ./scripts/cluster.sh init
 ./scripts/cluster.sh psql -f sql/schema.sql
 run=$(./scripts/run.sh new 2)
@@ -68,8 +74,15 @@ and body before a separate activity grades the move. A `miss` is a move in
 coordinate notation outside the accepted set, not a claim that it was legal.
 A bad answer, an invalid chat response and a non-2xx status get distinct verdicts.
 
+To send the prompts to an **already-authorized** Azure chat deployment,
+follow the [live run instructions](LIVE.md). `new` and `demo` never send HTTP.
+
 The [board key](data/boards.csv) contains **all** mating moves, not one
 preferred solution. To verify the key offline with the `chess==1.11.2` Python
 package installed, run `python3 scripts/check_boards.py`; alternatively,
 `uv run scripts/check_boards.py` installs the pinned checker. Neither Python
 nor a chess engine is needed to run the experiment.
+
+To check the SQL grader alone, run `./scripts/cluster.sh psql -f tests/grade.sql`.
+It exercises format, promotion and response-envelope edge cases in a transaction
+that rolls back.

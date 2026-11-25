@@ -14,13 +14,21 @@ launch_pair() {
 
 action=${1:-}
 case $action in
-    new|demo)
+    new|demo|new-live)
         max=$(($(wc -l < data/boards.csv) - 1))
+        provider=fixture
+        deployment=canned-v1
         boards=${2:-$max}
+        if [[ $action == new-live ]]; then
+            provider=azure
+            deployment=${2:-}
+            [[ $deployment =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die 'Pass the name of your authorized Azure chat deployment'
+            boards=${3:-1}
+        fi
         positive "$boards" && ((boards <= max)) || die "Choose 1..$max boards"
         [[ $action != demo ]] || ((boards >= 2)) || die 'The restart demo needs at least two boards'
-        run=$(psql -qAt -v boards="$boards" -f sql/new-run.sql)
-        if [[ $action == new ]]; then echo "$run"; exit; fi
+        run=$(psql -qAt -v boards="$boards" -v provider="$provider" -v deployment="$deployment" -f sql/new-run.sql)
+        if [[ $action != demo ]]; then echo "$run"; exit; fi
         ;;
     finish|score)
         run=${2:-}
@@ -28,7 +36,7 @@ case $action in
         boards=$(psql -Atqc "SELECT count(DISTINCT board) FROM mate.cell WHERE run_id = $run")
         ((boards > 0)) || die "No cells for run $run"
         ;;
-    *) die 'Usage: run.sh new [boards] | demo [boards] | finish RUN | score RUN' ;;
+    *) die 'Usage: run.sh new [boards] | demo [boards] | new-live DEPLOYMENT [boards] | finish RUN | score RUN' ;;
 esac
 
 score() { psql -v run="$run" -f sql/scorecard.sql; }
@@ -51,7 +59,7 @@ for ((i=1; i<=boards; i++)); do
     while read -r state; do
         case $state in
             completed) ;;
-            failed|cancelled) echo "Run $run board $i: $state; see df.result(instance)" >&2 ;;
+            failed|cancelled) echo "Run $run board $i: $state; see the scorecard for the affected cell" >&2 ;;
             *) die "Run $run board $i is not terminal: $state" ;;
         esac
     done <<< "$states"

@@ -2,9 +2,12 @@ BEGIN;
 CREATE TABLE mate.run (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     created_at timestamptz NOT NULL DEFAULT now(),
-    provider text NOT NULL,
+    provider text NOT NULL CHECK (provider IN ('fixture', 'azure')),
     deployment text NOT NULL,
-    settings jsonb NOT NULL
+    settings jsonb NOT NULL,
+    base_url text,
+    api_version text,
+    CHECK ((provider = 'azure') = (base_url IS NOT NULL AND api_version IS NOT NULL))
 );
 
 CREATE TABLE mate.cell (
@@ -16,7 +19,7 @@ CREATE TABLE mate.cell (
     mates text[] NOT NULL CHECK (cardinality(mates) > 0),
     variant text NOT NULL CHECK (variant IN ('A', 'B')),
     prompt text NOT NULL,
-    fixture jsonb NOT NULL,
+    fixture jsonb,
     instance text UNIQUE,
     http_status integer,
     encoding text,
@@ -54,7 +57,7 @@ BEGIN
         RAISE EXCEPTION 'No retained response for cell %', cell_id;
     ELSIF c.http_status NOT BETWEEN 200 AND 299 THEN
         outcome := 'provider_error';
-    ELSIF c.encoding <> 'text' OR NOT pg_input_is_valid(c.body, 'jsonb') THEN
+    ELSIF c.encoding IS DISTINCT FROM 'text' OR NOT pg_input_is_valid(c.body, 'jsonb') THEN
         outcome := 'response_error';
     ELSE
         content := c.body::jsonb #> '{choices,0,message,content}';
@@ -71,12 +74,44 @@ BEGIN
 END
 $$;
 
+CREATE FUNCTION mate.chat_base_url() RETURNS text STABLE LANGUAGE plpgsql AS $$
+DECLARE
+    url text;
+BEGIN
+    SELECT o.option_value INTO url
+    FROM pg_foreign_server s JOIN pg_foreign_data_wrapper w ON w.oid = s.srvfdw,
+         pg_options_to_table(s.srvoptions) o
+    WHERE s.srvname = 'mate_chat' AND w.fdwname = 'pg_durable_fdw' AND o.option_name = 'base_url';
+    IF url IS NULL OR url !~ '^https://[A-Za-z0-9-]+[.]openai[.]azure[.]com/?$' THEN
+        RAISE EXCEPTION 'Configure mate_chat with the HTTPS base URL of your authorized Azure OpenAI resource';
+    END IF;
+    RETURN url;
+END
+$$;
+
 CREATE FUNCTION mate.cell_graph(c mate.cell, pause_at text) RETURNS text LANGUAGE plpgsql AS $$
 DECLARE
-    capture text := (format('SELECT * FROM mate.fixture_request(%s)', c.id) |=> 'reply')
+    r mate.run;
+    request text;
+    capture text;
+BEGIN
+    SELECT * INTO STRICT r FROM mate.run WHERE id = c.run_id;
+    IF r.provider = 'fixture' THEN
+        request := format('SELECT * FROM mate.fixture_request(%s)', c.id);
+    ELSE
+        IF mate.chat_base_url() <> r.base_url THEN
+            RAISE EXCEPTION 'mate_chat destination changed since run % was frozen', r.id;
+        END IF;
+        request := df.http(
+            df.endpoint('mate_chat', format('/openai/deployments/%s/chat/completions?api-version=%s',
+                                            r.deployment, r.api_version)),
+            'POST', (r.settings || jsonb_build_object('messages', jsonb_build_array(
+                jsonb_build_object('role', 'user', 'content', c.prompt))))::text,
+            '{"Content-Type":"application/json"}'::jsonb);
+    END IF;
+    capture := (request |=> 'reply')
         ~> format('UPDATE mate.cell SET http_status = $reply.status, encoding = $reply.encoding,
                        body = $reply.body WHERE id = %s', c.id);
-BEGIN
     CASE pause_at
         WHEN 'before request' THEN capture := df.sleep(15) ~> capture;
         WHEN 'before grade' THEN capture := capture ~> df.sleep(15);
