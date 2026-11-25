@@ -24,6 +24,29 @@ The app submits workflows as `mate_app`, not `postgres`. Use
 reopen the same data. To discard it, stop the cluster first, then remove this
 checkout's `.mate/` directory.
 
+## Interrupt the experiment
+
+```bash
+./scripts/run.sh demo
+```
+
+This starts a new twelve-board **fixture** run and restarts **only this
+checkout's cluster** after 12 of 24 responses are on disk. Board 6 has two
+answers waiting to be graded. Board 7 has two workflows waiting to make
+their first request. A 15-second `df.sleep` at each boundary makes the
+interruption visible; there is no signal to send or job to recreate.
+pg_durable resumes those four instances. The driver submits later boards
+one pair at a time, just as it does without an interruption.
+
+See the [sample scorecard and restart evidence](SCORECARD.md). The command
+prints the half-finished and final scorecards, compares every
+earlier fixture attempt ID, workflow ID and response digest, and checks
+that each remaining request arrived after the new server started. If the
+driver itself exits, `./scripts/run.sh finish RUN_ID` continues from the
+saved instance IDs. This demonstrates recovery of **recorded** answers.
+If an actual HTTP request reaches a provider but its reply is lost, a
+retry can still incur another charge.
+
 ## Read the comparison
 
 These are **fixtures, not model measurements**. On board 1, A returns `a2a8`.

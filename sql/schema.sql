@@ -71,11 +71,20 @@ BEGIN
 END
 $$;
 
-CREATE FUNCTION mate.cell_graph(c mate.cell) RETURNS text LANGUAGE sql AS $$
-    SELECT (format('SELECT * FROM mate.fixture_request(%s)', c.id) |=> 'reply')
+CREATE FUNCTION mate.cell_graph(c mate.cell, pause_at text) RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+    capture text := (format('SELECT * FROM mate.fixture_request(%s)', c.id) |=> 'reply')
         ~> format('UPDATE mate.cell SET http_status = $reply.status, encoding = $reply.encoding,
-                       body = $reply.body WHERE id = %s', c.id)
-        ~> format('SELECT mate.grade_cell(%s)', c.id)
+                       body = $reply.body WHERE id = %s', c.id);
+BEGIN
+    CASE pause_at
+        WHEN 'before request' THEN capture := df.sleep(15) ~> capture;
+        WHEN 'before grade' THEN capture := capture ~> df.sleep(15);
+        WHEN '' THEN NULL;
+        ELSE RAISE EXCEPTION 'Unknown pause point: %', pause_at;
+    END CASE;
+    RETURN capture ~> format('SELECT mate.grade_cell(%s)', c.id);
+END
 $$;
 
 CREATE VIEW mate.results AS
