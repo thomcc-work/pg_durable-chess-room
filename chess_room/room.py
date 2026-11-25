@@ -55,6 +55,37 @@ class EngineWorker(threading.Thread):
         self.engine = engine
         self.stop_event = threading.Event()
         self.issues: dict[int, str] = {}
+        self.engine_issue = None
+        self.engine_retry_at = 0.0
+        self.engine_delay = 1.0
+
+    def close_engine(self):
+        if self.engine is not None:
+            self.engine.close()
+            self.engine = None
+
+    def engine_offline(self, exc):
+        self.close_engine()
+        self.engine_issue = f"Stockfish unavailable: {exc}. Retrying the saved engine turn."
+        print(self.engine_issue, file=sys.stderr)
+        self.engine_retry_at = time.monotonic() + self.engine_delay
+        self.engine_delay = min(30.0, self.engine_delay * 2)
+
+    def advance_turn(self, db, gid, phase):
+        if phase == "engine" and self.engine is None:
+            if time.monotonic() < self.engine_retry_at:
+                return
+            try:
+                self.engine = opponent.open_engine()
+            except (OSError, ValueError, chess.engine.EngineError) as exc:
+                self.engine_offline(exc)
+                return
+        try:
+            if opponent.advance(db, self.engine, gid):
+                self.engine_delay = 1.0
+                self.engine_issue = None
+        except (chess.engine.EngineTerminatedError, BrokenPipeError, ConnectionResetError, TimeoutError) as exc:
+            self.engine_offline(exc)
 
     def run(self):
         offline = False
@@ -73,7 +104,7 @@ class EngineWorker(threading.Thread):
                             if failed_phase == phase and time.monotonic() < retry:
                                 continue
                             try:
-                                opponent.advance(db, self.engine, gid)
+                                self.advance_turn(db, gid, phase)
                             except (psycopg.OperationalError, psycopg.InterfaceError):
                                 raise
                             except psycopg.DatabaseError as exc:
@@ -196,7 +227,10 @@ class BoardHandler(BaseHTTPRequestHandler):
                     board.push_uci(move.uci)
                 self.respond(200, board_svg(board), "image/svg+xml")
             else:
-                self.respond(200, snapshot(db, g, self.server.worker.issues.get(g.id)))
+                issue = self.server.worker.issues.get(g.id)
+                if not issue and g.phase == "engine" and not g.engine_paused:
+                    issue = self.server.worker.engine_issue
+                self.respond(200, snapshot(db, g, issue))
 
     def mutate(self, path, body):
         with cluster.connect() as db:
@@ -250,11 +284,11 @@ def serve(port: int) -> None:
         raise ValueError("Port must be in 0..65535")
     with cluster.connect() as db:
         game.install(db)
-    with opponent.open_engine() as engine:
-        worker = EngineWorker(engine)
+    worker = EngineWorker(opponent.open_engine())
+    try:
         with BoardServer(port, worker) as server:
             worker.start()
-            print(f"The Chess Room / {engine.id['name']}: http://127.0.0.1:{server.server_port}", flush=True)
+            print(f"The Chess Room / {server.opponent_name}: http://127.0.0.1:{server.server_port}", flush=True)
             try:
                 server.serve_forever()
             except KeyboardInterrupt:
@@ -262,3 +296,5 @@ def serve(port: int) -> None:
             finally:
                 worker.stop_event.set()
                 worker.join()
+    finally:
+        worker.close_engine()

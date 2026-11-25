@@ -23,7 +23,8 @@ class BoardHTTP(unittest.TestCase):
         cluster.use_private_socket()
         with cluster.connect() as db:
             game.install(db)
-        cls.server = BoardServer(0, SimpleNamespace(engine=SimpleNamespace(id={"name": "unused: terminal test"}), issues={}))
+        cls.server = BoardServer(0, SimpleNamespace(engine=SimpleNamespace(id={"name": "unused: terminal test"}),
+                                                    issues={}, engine_issue=None))
         cls.base = f"http://127.0.0.1:{cls.server.server_port}"
         cls.thread = threading.Thread(target=cls.server.serve_forever)
         cls.thread.start()

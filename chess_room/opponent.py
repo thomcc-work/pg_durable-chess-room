@@ -41,9 +41,10 @@ def reply(db: Connection, engine: chess.engine.SimpleEngine, game: Game) -> bool
     return True
 
 
-def advance(db: Connection, engine: chess.engine.SimpleEngine, game_id: int) -> None:
+def advance(db: Connection, engine: chess.engine.SimpleEngine | None, game_id: int) -> bool:
     game = get(db, game_id)
     if game.phase in ("submitted", "closing"):
         wake(db, game)
-    elif game.phase == "engine" and not game.engine_paused:
-        reply(db, engine, game)
+    elif game.phase == "engine" and not game.engine_paused and engine is not None:
+        return reply(db, engine, game)
+    return False
