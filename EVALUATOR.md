@@ -38,6 +38,10 @@ ID, workflow ID and response digest, verifies the remaining requests arrived
 after restart, and prints the completed comparison. If the driver itself
 exits, `uv run -m chess_room finish RUN_ID` continues from the saved instances.
 This is evidence about *recorded* replies, not exactly-once HTTP billing.
+A recorded reply can still be graded after pg_durable expires its workflow
+history. Observed workflow failures stay on the scorecard. For an existing
+cluster, `uv run -m chess_room start` applies the schema update without
+replacing data.
 
 `new` and `demo` never send HTTP. To send the same frozen prompts to an
 **already-authorized** Azure deployment, follow the [live run instructions](LIVE.md).

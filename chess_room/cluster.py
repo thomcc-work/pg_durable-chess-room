@@ -85,6 +85,8 @@ def bootstrap() -> None:
     with connect() as db:
         if not db.execute("SELECT to_regclass('chess_room.fixture_attempt')").fetchone()[0]:
             db.execute((ROOT / "sql/schema.sql").read_text())
+        else:
+            db.execute("ALTER TABLE chess_room.cell ADD COLUMN IF NOT EXISTS workflow_error text")
 
 
 def start() -> None:

@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from itertools import groupby
 
+import psycopg
 from psycopg import Connection
 from psycopg.rows import class_row
 from psycopg.types.json import Jsonb
@@ -107,21 +108,45 @@ def launch_pair(db: Connection, run: Run, board: int, *, delay_request=False, de
                        (graph, f"chess-room/eval/{run.id}/{board}/{variant}", cell_id))
 
 
+def workflow_failure(db: Connection, cell_id: int, instance: str) -> str | None:
+    info = db.execute("SELECT status, output FROM df.instance_info(%s)", (instance,)).fetchone()
+    if info and info[0] in ("failed", "cancelled"):
+        reason = info[1] or info[0]
+    elif not info and not db.execute("SELECT 1 FROM df.instances WHERE instance_id=%s", (instance,)).fetchone():
+        reason = "Workflow history expired without a recorded response"
+    else:
+        return None
+    stored = db.execute("UPDATE chess_room.cell SET verdict='workflow_error', workflow_error=%s "
+                        "WHERE id=%s AND verdict IS NULL AND http_status IS NULL RETURNING workflow_error",
+                        (reason, cell_id)).fetchone()
+    return stored[0] if stored else None
+
+
 def finish_pair(db: Connection, run: Run, board: int) -> None:
     launch_pair(db, run, board)
-    cells = db.execute("SELECT id, instance FROM chess_room.cell WHERE run_id=%s AND board=%s AND verdict IS NULL",
+    cells = db.execute("SELECT id, instance, http_status FROM chess_room.cell "
+                       "WHERE run_id=%s AND board=%s AND verdict IS NULL",
                        (run.id, board)).fetchall()
-    for cell_id, instance in cells:
-        state, = db.execute("SELECT df.await_instance(%s, 90)", (instance,)).fetchone()
-        if state in ("failed", "cancelled"):
-            continue  # A workflow failure has no chat reply; show the engine's diagnostic on the scorecard.
-        if state != "completed":
-            raise ValueError(f"Workflow {instance} is not terminal: {state}")
+    for cell_id, instance, captured in cells:
+        if captured is None:
+            if workflow_failure(db, cell_id, instance):
+                continue
+            try:
+                state, = db.execute("SELECT df.await_instance(%s, 90)", (instance,)).fetchone()
+            except psycopg.DatabaseError:
+                # Pruning can race the wait. Don't mask other failures or reissue the request.
+                if db.execute("SELECT 1 FROM df.instances WHERE instance_id=%s", (instance,)).fetchone():
+                    raise
+                state = "expired"
+            if state not in ("completed", "failed", "cancelled", "expired"):
+                raise ValueError(f"Workflow {instance} is not terminal: {state}")
         # Read in a fresh statement: the worker may have committed its reply while we waited.
         status, encoding, body, mates = db.execute(
             "SELECT http_status, encoding, body, mates FROM chess_room.cell WHERE id=%s", (cell_id,)
         ).fetchone()
         if status is None:
+            if workflow_failure(db, cell_id, instance):
+                continue
             raise ValueError(f"Workflow {instance} completed without recording a response")
         verdict, answer = grade(status, encoding, body, mates)
         db.execute("UPDATE chess_room.cell SET verdict=%s, answer=%s WHERE id=%s AND verdict IS NULL",
@@ -134,18 +159,18 @@ def board_numbers(db: Connection, run: Run) -> list[int]:
 
 def scorecard(db: Connection, run: Run) -> None:
     print(f"Run {run.id} | {run.provider} | {run.deployment} | {json.dumps(run.settings)}")
-    cells = db.execute("SELECT board, title, variant, answer, verdict, http_status, instance "
+    cells = db.execute("SELECT board, title, variant, answer, verdict, http_status, instance, id, workflow_error "
                        "FROM chess_room.cell WHERE run_id=%s ORDER BY board, variant", (run.id,)).fetchall()
     table = [("Board", "Position", "A answer", "A verdict", "B answer", "B verdict", "Comparison")]
     for (board, title), pair in groupby(cells, key=lambda c: c[:2]):
         states, columns = {}, []
-        for _, _, variant, answer, verdict, status, instance in pair:
+        for _, _, variant, answer, verdict, status, instance, cell_id, reason in pair:
             state = verdict or ("recorded" if status is not None else "pending")
             label = f"HTTP {status}" if state == "provider_error" else state
-            if not verdict and instance:
-                info = db.execute("SELECT status, output FROM df.instance_info(%s)", (instance,)).fetchone()
-                if info and info[0] in ("failed", "cancelled"):
-                    state, label = "workflow_error", f"workflow_error: {info[1]}"
+            if not verdict and status is None and instance:
+                reason = workflow_failure(db, cell_id, instance)
+            if reason:
+                state, label = "workflow_error", f"workflow_error: {reason}"
             states[variant] = state
             columns.extend(("-" if answer is None else json.dumps(answer, ensure_ascii=False)[1:-1], label))
         table.append((str(board), title, *columns, comparison(states["A"], states["B"])))

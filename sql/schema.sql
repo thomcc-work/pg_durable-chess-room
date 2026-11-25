@@ -26,6 +26,7 @@ CREATE TABLE chess_room.cell (
     body text,
     answer text,
     verdict text,
+    workflow_error text,
     UNIQUE (run_id, board, variant)
 );
 
