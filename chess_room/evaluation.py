@@ -30,7 +30,7 @@ def grade(status: int, encoding: str | None, body: str | None, mates: list[str])
     if not isinstance(content, str) or re.search(r"[\x00\ud800-\udfff]", content):
         return "response_error", None
     move = content.strip(" \t\r\n")
-    if not re.fullmatch("[a-h][1-8][a-h][1-8][qrbn]?", move):
+    if not re.fullmatch("[a-h][1-8][a-h][1-8][qrbn]?", move) or move[:2] == move[2:4]:
         return "malformed", move
     return ("mate" if move in mates else "miss"), move
 

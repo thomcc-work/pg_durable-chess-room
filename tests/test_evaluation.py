@@ -9,6 +9,7 @@ class EvaluationTests(unittest.TestCase):
             (" c7c8r\n", ("mate", "c7c8r")),
             ("c7c8q", ("mate", "c7c8q")),
             ("c7c8b", ("miss", "c7c8b")),
+            ("a1a1", ("malformed", "a1a1")),
             ("c8=Q#", ("malformed", "c8=Q#")),
             ("c7c8q or c7c8r", ("malformed", "c7c8q or c7c8r")),
         ):
