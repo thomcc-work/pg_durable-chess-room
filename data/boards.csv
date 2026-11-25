@@ -1,0 +1,3 @@
+board,title,fen,mates,a_status,a_text,b_status,b_text
+1,Rook on the h-file,7k/5K2/8/8/8/8/R7/8 w - - 0 1,a2h2,200,a2a8,200,a2h2
+2,Back rank,k7/pp6/8/8/8/8/8/4R1K1 w - - 0 1,e1e8,200,e1e8,200,e1e7
