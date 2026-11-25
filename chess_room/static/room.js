@@ -6,6 +6,8 @@ const squares = new Map();
 let state, selected = null, viewed = null, busy = false, generation = 0, offline = false;
 let historyKey = "", movePly = null;
 const pendingKey = `chess-room:${gameId}:pending`;
+let pendingCommand = null, storageReadable = true, imageFailed = false;
+$("drawing").onerror = () => { imageFailed = true; };
 
 async function api(path, body) {
   const options = body === undefined ? {} : {
@@ -48,15 +50,16 @@ for (let rank=8; rank>=1; rank--) for (const file of "abcdefgh") {
   button.onfocus = () => { for (const b of squares.values()) b.tabIndex = b === button ? 0 : -1; };
   squares.set(sq, button); $("squares").append(button);
 }
-function canMove() { return state && state.phase === "human" && viewed === null && !busy && !offline && !sessionStorage.getItem(pendingKey); }
+function canMove() { return state && state.phase === "human" && viewed === null && !busy && !offline && storageReadable && !pendingCommand; }
 function select(sq) {
   if (!canMove()) return;
   const options = selected ? state.legal.filter(m => m.startsWith(selected + sq)) : [];
   if (options.length === 1) { sendMove(options[0]); return; }
   if (options.length > 1) {
+    const openingPly = state.ply;
     $("choices").replaceChildren(...options.map(m => {
       const b = document.createElement("button"); b.textContent = names[m[4]];
-      b.onclick = () => { $("promotion").close(); sendMove(m); }; return b;
+      b.onclick = () => { $("promotion").close(); sendMove(m, openingPly); }; return b;
     }));
     $("promotion").showModal(); return;
   }
@@ -89,7 +92,10 @@ function render() {
   const ply = viewed ?? state.ply;
   const fen = ply ? state.moves[ply-1].fen : state.start;
   const image = `${base}/board.svg?ply=${ply}`;
-  if ($("drawing").getAttribute("src") !== image) $("drawing").src = image;
+  if ($("drawing").getAttribute("src") !== image || (imageFailed && !offline)) {
+    imageFailed = false;
+    $("drawing").src = image;
+  }
   const placement = pieces(fen);
   for (const [sq,b] of squares) {
     b.setAttribute("aria-label", `${sq}: ${placement.get(sq) || "empty"}`);
@@ -116,9 +122,9 @@ function render() {
   $("receipt").hidden = false; $("fen").textContent = state.fen; $("instance").textContent = state.instance;
   const last = state.moves.findLast(m => m.request);
   $("key").textContent = last?.request || "No White move yet.";
-  $("retry").disabled = busy || offline || !(last || sessionStorage.getItem(pendingKey));
-  $("pending").hidden = !sessionStorage.getItem(pendingKey) || busy;
-  $("pending").disabled = offline;
+  $("retry").disabled = busy || offline || !storageReadable || !(last || pendingCommand);
+  $("pending").hidden = !pendingCommand || busy;
+  $("pending").disabled = offline || !storageReadable;
   $("hold").textContent = state.held ? "Resume engine" : "Hold engine reply";
   $("hold").disabled = busy || offline || state.result !== "*" || viewed !== null;
   const saved = [...$("saved").options].find(o => o.value === String(state.id));
@@ -133,14 +139,27 @@ async function refresh() {
   try {
     const fresh = await api(base);
     if (ticket !== generation) return;
-    if (state?.ply !== fresh.ply) { selected = null; $("uci").value = ""; }
-    state = fresh;
-    const pending = sessionStorage.getItem(pendingKey);
-    if (pending && state.moves.some(m => m.request === JSON.parse(pending).request)) {
-      sessionStorage.removeItem(pendingKey);
-      message("The saved scoresheet confirms your move.");
+    if (state?.ply !== fresh.ply || fresh.phase !== "human") {
+      selected = null; $("uci").value = "";
+      if ($("promotion").open) {
+        $("promotion").close();
+        message("The board changed. Choose a move on the current position.");
+      }
     }
+    state = fresh;
     if (offline) message("Reconnected to the saved board.");
+    try {
+      pendingCommand = JSON.parse(sessionStorage.getItem(pendingKey));
+      storageReadable = true;
+      if (pendingCommand && state.moves.some(m => m.request === pendingCommand.request)) {
+        sessionStorage.removeItem(pendingKey);
+        pendingCommand = null;
+        message("The saved scoresheet confirms your move.");
+      }
+    } catch (e) {
+      storageReadable = false;
+      message(`Cannot read or update the move receipt in this tab: ${e.message}`);
+    }
     offline = false; render();
   } catch (e) {
     if (ticket !== generation) return;
@@ -150,29 +169,42 @@ async function refresh() {
 async function postMove(command) {
   if (busy) return;
   busy = true; ++generation; selected = null;
-  sessionStorage.setItem(pendingKey, JSON.stringify(command));
-  render();
   try {
-    const receipt = await api(`${base}/move`, command);
-    sessionStorage.removeItem(pendingKey);
-    message(receipt.applied ? `Recorded ${command.uci}.` : `Duplicate acknowledged: ${command.uci} was not applied again.`);
-  } catch (e) {
-    // Only discard a request that was definitively rejected. A lost HTTP reply is ambiguous.
-    if (e.status === 400 || e.status === 409) sessionStorage.removeItem(pendingKey);
-    message(`${e.message}${!e.status || e.status === 503 ? " Use Resend last move to retry the same request." : ""}`);
+    try {
+      sessionStorage.setItem(pendingKey, JSON.stringify(command));
+      pendingCommand = command;
+    } catch (e) {
+      message(`Move not sent: this tab could not save the retry receipt (${e.message}).`);
+      return;
+    }
+    render();
+    try {
+      const receipt = await api(`${base}/move`, command);
+      message(receipt.applied ? `Recorded ${command.uci}.` : `Duplicate acknowledged: ${command.uci} was not applied again.`);
+    } catch (e) {
+      const rejected = e.status === 400 || e.status === 409;
+      message(`${e.message}${rejected ? "" : " Use Resend last move to retry the same request."}`);
+      if (!rejected) return;
+    }
+    try {
+      sessionStorage.removeItem(pendingKey);
+      pendingCommand = null;
+    } catch (e) {
+      message(`Could not clear the move receipt: ${e.message}. Resending it will not duplicate the move.`);
+    }
   } finally { busy = false; await refresh(); }
 }
-function sendMove(uci) {
+function sendMove(uci, expectedPly = state?.ply) {
+  if (state?.ply !== expectedPly) { message("The board changed. Select your move again."); return; }
   if (!canMove()) return;
   if (!state.legal.includes(uci)) { message("That is not a legal move in this position."); return; }
-  postMove({ply:state.ply, uci, request:crypto.randomUUID()});
+  postMove({ply:expectedPly, uci, request:crypto.randomUUID()});
 }
 $("move-form").onsubmit = e => { e.preventDefault(); sendMove($("uci").value.trim()); };
 $("cancel-promotion").onclick = () => $("promotion").close();
 $("live").onclick = () => { viewed = null; render(); };
 $("retry").onclick = () => {
-  const pending = sessionStorage.getItem(pendingKey);
-  if (pending) { postMove(JSON.parse(pending)); return; }
+  if (pendingCommand) { postMove(pendingCommand); return; }
   const last = state.moves.findLast(m => m.request);
   if (last) postMove({ply:last.ply-1, uci:last.uci, request:last.request});
 };

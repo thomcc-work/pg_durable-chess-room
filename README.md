@@ -99,6 +99,7 @@ both first and remove only this checkout's `.chess-room/` directory.
 
 ```sh
 uv run python -m unittest discover -s tests
+node --test tests/board_ui.test.cjs  # browser-event regressions, no live service needed
 # Requires a running applet cluster; creates test games. Run without the room worker.
 uv run python -m unittest discover -s tests -p '*_integration.py'
 ```
