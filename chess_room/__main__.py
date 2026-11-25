@@ -38,10 +38,12 @@ def main(argv: list[str]) -> None:
         cluster.psql(argv[1:], "postgres" if args.command == "admin" else "chess_room_app")
     elif args.command == "init":
         cluster.init()
-    elif args.command in ("start", "stop", "restart"):
+    elif args.command == "start":
+        cluster.start()
+    elif args.command in ("stop", "restart"):
         cluster.pg_ctl(args.command)
         if args.command != "stop":
-            cluster.wait_for_worker()
+            cluster.bootstrap()
     elif args.command == "demo":
         recovery.demo(args.boards)
     elif args.command == "game-demo":

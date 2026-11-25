@@ -23,6 +23,10 @@ On a fresh checkout, run `uv run -m chess_room init`. If you already have a
 stopped `.chess-room/` cluster, run `uv run -m chess_room start` instead.
 `init` creates a new cluster; it does not import earlier installations or
 overwrite saved data.
+If setup is interrupted after the server is initialized, run `uv run -m
+chess_room start` to finish it, even if PostgreSQL is already running. Do
+not copy or move an initialized data directory to control it from a second
+checkout: create a separate cluster there.
 The server accepts no TCP connections and keeps its Unix socket, log and
 data in this checkout's private `.chess-room/` directory.
 

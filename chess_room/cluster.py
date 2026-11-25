@@ -2,6 +2,7 @@
 
 import os
 import re
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -27,7 +28,16 @@ def use_private_socket() -> None:
 def bindir() -> Path:
     if STATE.is_symlink() or DATA.is_symlink() or MARKER.is_symlink() or not MARKER.is_file():
         raise ValueError("No applet-owned cluster here. Run 'uv run -m chess_room init' first.")
-    return Path(MARKER.read_text().strip())
+    binaries = Path(MARKER.read_text().strip())
+    owner = STATE / "pg-data-owner"
+    if owner.is_symlink() or (owner.exists() and owner.read_text().strip() != str(DATA.resolve())):
+        raise ValueError("Refusing to control a cluster initialized in another directory.")
+    if not owner.exists():
+        # Older checkouts recorded only the binaries. Require independent evidence of the data path.
+        options = DATA / "postmaster.opts"
+        if not options.is_file() or shlex.split(options.read_text()) != [str(binaries / "postgres"), "-D", str(DATA)]:
+            raise ValueError("Cannot establish ownership of this legacy data directory; refusing to control it.")
+    return binaries
 
 
 def connect(user: str = "chess_room_app") -> psycopg.Connection:
@@ -41,7 +51,15 @@ def psql(args: list[str], user: str = "chess_room_app") -> None:
 
 
 def pg_ctl(action: str) -> None:
-    subprocess.run([bindir() / "pg_ctl", "-D", DATA, "-l", LOG, "-m", "fast", "-w", action], check=True)
+    binaries = bindir()
+    pid = DATA / "postmaster.pid"
+    if pid.exists() and pid.read_text().splitlines()[1:2] != [str(DATA)]:
+        raise ValueError("Postmaster PID file belongs to another data directory.")
+    # Start with our own options rather than replaying postmaster.opts from a backup.
+    if action == "restart":
+        pg_ctl("stop")
+        action = "start"
+    subprocess.run([binaries / "pg_ctl", "-D", DATA, "-l", LOG, "-m", "fast", "-w", action], check=True)
 
 
 def wait_for_worker() -> None:
@@ -53,6 +71,29 @@ def wait_for_worker() -> None:
                 return
             time.sleep(0.5)
     raise TimeoutError(f"No fresh pg_durable worker heartbeat. See {LOG}")
+
+
+def bootstrap() -> None:
+    with connect("postgres") as db, db.transaction():
+        db.execute("CREATE EXTENSION IF NOT EXISTS pg_durable")
+        if not db.execute("SELECT 1 FROM pg_roles WHERE rolname='chess_room_app'").fetchone():
+            db.execute("CREATE ROLE chess_room_app LOGIN")
+        if not db.execute("SELECT to_regnamespace('chess_room')").fetchone()[0]:
+            db.execute("SELECT df.grant_usage('chess_room_app')")
+            db.execute("CREATE SCHEMA chess_room AUTHORIZATION chess_room_app")
+    wait_for_worker()
+    with connect() as db:
+        if not db.execute("SELECT to_regclass('chess_room.fixture_attempt')").fetchone()[0]:
+            db.execute((ROOT / "sql/schema.sql").read_text())
+
+
+def start() -> None:
+    status = subprocess.run([bindir() / "pg_ctl", "-D", DATA, "status"], stdout=subprocess.DEVNULL)
+    if status.returncode == 3:  # A valid, stopped cluster.
+        pg_ctl("start")
+    else:
+        status.check_returncode()
+    bootstrap()
 
 
 def init() -> None:
@@ -76,13 +117,7 @@ def init() -> None:
                    stdout=subprocess.DEVNULL, check=True)
     with (DATA / "postgresql.conf").open("a") as config:
         config.write("\nshared_preload_libraries = 'pg_durable'\npg_durable.worker_role = 'postgres'\n")
+    (STATE / "pg-data-owner").write_text(f"{DATA.resolve()}\n")
     MARKER.write_text(f"{binaries}\n")
     pg_ctl("start")
-    with connect("postgres") as db:
-        db.execute("CREATE EXTENSION pg_durable")
-        db.execute("CREATE ROLE chess_room_app LOGIN")
-        db.execute("SELECT df.grant_usage('chess_room_app')")
-        db.execute("CREATE SCHEMA chess_room AUTHORIZATION chess_room_app")
-    wait_for_worker()
-    with connect() as db:
-        db.execute((ROOT / "sql/schema.sql").read_text())
+    bootstrap()
