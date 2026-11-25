@@ -2,4 +2,4 @@
 name = "mate-in-one"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["psycopg>=3.2,<4"]
+dependencies = ["chess==1.11.2", "psycopg>=3.2,<4"]

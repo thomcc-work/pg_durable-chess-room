@@ -56,6 +56,17 @@ saved instance IDs. This demonstrates recovery of **recorded** answers.
 If an actual HTTP request reaches a provider but its reply is lost, a
 retry can still incur another charge.
 
+## Try the original human-versus-engine restart
+
+With the private cluster running, `uv run -m mate game-demo` creates a
+separate game against **real Stockfish**. Install the `stockfish` package
+(on Debian, `apt install stockfish`), or set `STOCKFISH` to a local UCI
+executable. No model credentials are needed. The command records `1. e4`,
+waits until the game's workflow releases Black to move, then restarts
+Postgres before the engine searches. It resubmits the same command twice
+and plays another full turn, checking the move history and workflow ID.
+The evaluator does not start or require Stockfish.
+
 ## Read the comparison
 
 These are **fixtures, not model measurements**. On board 1, A returns `a2a8`.
@@ -85,7 +96,7 @@ The [board key](data/boards.csv) contains **all** mating moves, not one
 preferred solution. To verify the key offline with the `chess==1.11.2` Python
 package installed, run `python3 scripts/check_boards.py`; alternatively,
 `uv run scripts/check_boards.py` installs the pinned checker. The experiment
-itself does not require a chess library or engine.
+uses the stored answer keys, not an engine, to grade replies.
 
 To test the grader, prompts and comparisons without a database, run
 `uv run python -m unittest discover -s tests`.

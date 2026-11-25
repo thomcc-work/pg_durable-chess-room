@@ -15,6 +15,7 @@ def main(argv: list[str]) -> None:
         ("start", "open the saved cluster"), ("stop", "stop it without deleting data"),
         ("restart", "restart the applet cluster"), ("psql", "open psql as mate_app (accepts psql flags)"),
         ("admin", "open the private cluster's admin console (accepts psql flags)"),
+        ("game-demo", "restart mid-game, retry a move and continue against real Stockfish"),
     ):
         commands.add_parser(name, help=help_text)
     for name in ("new", "demo"):
@@ -38,6 +39,9 @@ def main(argv: list[str]) -> None:
             cluster.wait_for_worker()
     elif args.command == "demo":
         recovery.demo(args.boards)
+    elif args.command == "game-demo":
+        from .game_demo import demo
+        demo()
     else:
         with cluster.connect() as db:
             if args.command in ("new", "new-live"):
