@@ -8,9 +8,9 @@ then grades it and puts both answers on the same row.
 [Start the private cluster](README.md#start-a-private-cluster), then try two boards:
 
 ```sh
-uv run -m mate new 2       # prints the run ID
-uv run -m mate finish 1    # use that ID; 1 on a fresh cluster
-uv run -m mate score 1     # revisit without launching another workflow
+uv run -m chess_room new 2       # prints the run ID
+uv run -m chess_room finish 1    # use that ID; 1 on a fresh cluster
+uv run -m chess_room score 1     # revisit without launching another workflow
 ```
 
 These are **fixtures, not model measurements**. On board 1, A's `a2a8`
@@ -24,7 +24,7 @@ counts as a missed mate.
 ## Interrupt the experiment
 
 ```sh
-uv run -m mate demo
+uv run -m chess_room demo
 ```
 
 The driver restarts **only this checkout's Postgres** after 12 of 24
@@ -36,7 +36,7 @@ The [sample scorecard](SCORECARD.md) shows the result and the request
 receipts at the boundary. The command compares each earlier fixture attempt
 ID, workflow ID and response digest, verifies the remaining requests arrived
 after restart, and prints the completed comparison. If the driver itself
-exits, `uv run -m mate finish RUN_ID` continues from the saved instances.
+exits, `uv run -m chess_room finish RUN_ID` continues from the saved instances.
 This is evidence about *recorded* replies, not exactly-once HTTP billing.
 
 `new` and `demo` never send HTTP. To send the same frozen prompts to an

@@ -26,7 +26,7 @@ def use_private_socket() -> None:
 
 def bindir() -> Path:
     if STATE.is_symlink() or DATA.is_symlink() or MARKER.is_symlink() or not MARKER.is_file():
-        raise ValueError("No applet-owned cluster here. Run 'uv run -m mate init' first.")
+        raise ValueError("No applet-owned cluster here. Run 'uv run -m chess_room init' first.")
     return Path(MARKER.read_text().strip())
 
 

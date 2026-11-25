@@ -8,7 +8,10 @@ from . import cluster, experiment, recovery
 
 
 def main(argv: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="uv run -m mate", description="Mate in One prompt evaluator")
+    parser = argparse.ArgumentParser(
+        prog="uv run -m chess_room",
+        description="The Chess Room: play Stockfish or compare mate-in-one prompts.",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     for name, help_text in (
         ("init", "create a private cluster and install the applet schema"),
@@ -59,10 +62,14 @@ def main(argv: list[str]) -> None:
                     experiment.scorecard(db, run)
 
 
-if __name__ == "__main__":
+def cli() -> None:
     try:
         main(sys.argv[1:])
     except subprocess.CalledProcessError as exc:
         sys.exit(exc.returncode)
     except (ValueError, OSError, psycopg.Error) as exc:
-        sys.exit(f"mate: {exc}")
+        sys.exit(f"chess-room: {exc}")
+
+
+if __name__ == "__main__":
+    cli()

@@ -19,9 +19,10 @@ On the hackathon host, use:
 export PG_CONFIG="$HOME/.pgrx/17.11/pgrx-install/bin/pg_config"
 ```
 
-On a fresh checkout, run `uv run -m mate init`. If you already have a
-stopped `.mate/`, run `uv run -m mate start` instead. Existing games and
-evaluator runs keep their IDs. `init` refuses to overwrite saved data.
+On a fresh checkout, run `uv run -m chess_room init`. If you already have a
+stopped `.mate/`, run `uv run -m chess_room start` instead. Existing games and
+evaluator runs keep their IDs. `uv run -m mate` remains an alias for existing
+scripts. `init` refuses to overwrite saved data.
 The server accepts no TCP connections and keeps its Unix socket, log and
 data in this checkout's private `.mate/` directory.
 
@@ -31,7 +32,7 @@ Install Stockfish (e.g. the Debian `stockfish` package) or point `STOCKFISH`
 at its executable. The hackathon checkout already has a private copy.
 
 ```sh
-uv run -m mate play
+uv run -m chess_room play
 ```
 
 Open **[the local board](http://127.0.0.1:8765/)**, choose **New game →
@@ -54,14 +55,14 @@ not a public multiplayer server.
 1. In a new game, expand **Durable turn receipt**, choose **Hold engine
    reply**, then play `e2e4`. The scoresheet shows `1. e4`. The receipt
    shows the workflow ID, board position in FEN, and White's request ID.
-2. In another terminal run `uv run -m mate restart`. Only this applet's
+2. In another terminal run `uv run -m chess_room restart`. Only this applet's
    cluster restarts. Reload the same game. The three receipt fields and
    the scoresheet should be unchanged.
 3. Choose **Resend last move**. It acknowledges the duplicate without
    adding a ply. Choose **Resume engine**: Black replies and it's your
    turn again.
 
-`uv run -m mate game-demo` runs the same check automatically with a new game,
+`uv run -m chess_room game-demo` runs the same check automatically with a new game,
 even while the room is open. It verifies that the postmaster really changed,
 retries `e4` both before and after Black's reply, plays a second full turn,
 and leaves the board available in **Saved games**. In the browser test,
@@ -82,7 +83,7 @@ its reply can commit only for the same game, phase and ply. The room
 reconnects after a database restart and picks up outstanding turns.
 No server's HTTP policy has to be relaxed for the engine.
 
-Stop the room with **Ctrl-C**, then use `uv run -m mate stop` to stop
+Stop the room with **Ctrl-C**, then use `uv run -m chess_room stop` to stop
 Postgres without deleting anything. To discard all applet data, stop
 both first and remove only this checkout's `.mate/` directory.
 

@@ -5,7 +5,7 @@ the FENs to your deployment and can incur charges. Start with one board
 (two calls). Use a deployment that accepts Chat Completions API
 `2024-10-21`, `temperature: 0`, `n: 1`, and `max_tokens: 32`.
 
-On the **private applet cluster**, use `uv run -m mate admin` to grant
+On the **private applet cluster**, use `uv run -m chess_room admin` to grant
 HTTP access and bind a foreign server to the authorized resource:
 
 ```sql
@@ -29,10 +29,10 @@ disposable, protected cluster. No provisioning of an Azure resource, new
 login or HTTP policy change is necessary for the fixture demo.
 
 ```bash
-run=$(uv run -m mate new-live YOUR-DEPLOYMENT 1)    # snapshot only; no network
-uv run -m mate psql -c "SELECT provider, base_url, deployment, api_version, settings FROM mate.run WHERE id = $run"
-uv run -m mate psql -c "SELECT variant, prompt FROM mate.cell WHERE run_id = $run"
-uv run -m mate finish "$run"                        # sends the two requests
+run=$(uv run -m chess_room new-live YOUR-DEPLOYMENT 1)  # snapshot only; no network
+uv run -m chess_room psql -c "SELECT provider, base_url, deployment, api_version, settings FROM mate.run WHERE id = $run"
+uv run -m chess_room psql -c "SELECT variant, prompt FROM mate.cell WHERE run_id = $run"
+uv run -m chess_room finish "$run"                      # sends the two requests
 ```
 
 The workflow uses `df.http(df.endpoint(...))`; pg_durable resolves the
