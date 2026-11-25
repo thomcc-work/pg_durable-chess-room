@@ -1,3 +1,13 @@
 board,title,fen,mates,a_status,a_text,b_status,b_text
 1,Rook on the h-file,7k/5K2/8/8/8/8/R7/8 w - - 0 1,a2h2,200,a2a8,200,a2h2
 2,Back rank,k7/pp6/8/8/8/8/8/4R1K1 w - - 0 1,e1e8,200,e1e8,200,e1e7
+3,Black rook on the h-file,8/r7/8/8/8/8/5k2/7K b - - 0 1,a7h7,200,a7a8,200,a7h7
+4,Two queen landings,7k/5K2/4Q3/8/8/8/8/8 w - - 0 1,e6h3 e6h6,200,e6h3,200,e6h6
+5,Rook underpromotion,k7/2P5/1K6/8/8/8/8/8 w - - 0 1,c7c8q c7c8r,200,c7c8r,200,c7c8q
+6,Smothered knight,6rk/6pp/8/6N1/8/8/8/K7 w - - 0 1,g5f7,200,g5h7,200,g5f7
+7,Remove the h-pawn,7k/5K2/7p/8/8/8/8/7R w - - 0 1,h1h6,200,h1h6,200,h1h6
+8,Black back rank,r5k1/8/8/8/8/8/6PP/7K b - - 0 1,a8a1,200,Ra1#,200,a8a1
+9,Queen on the a-file,k7/1pK5/8/8/8/8/7Q/8 w - - 0 1,h2a2,200,h2a2,429,fixture: rate limited
+10,Rook behind the pawn,k7/1pR5/1K6/8/8/8/8/8 w - - 0 1,c7c8,200,c7c8,200,c7h7
+11,Four queen mates,7K/5k2/8/8/8/8/8/6q1 b - - 0 1,g1g7 g1g8 g1h1 g1h2,200,g1g7,200,g1h1
+12,Black promotes,8/8/8/8/8/1k6/2p5/K7 b - - 0 1,c2c1q c2c1r,200,c2c1b,200,c2c1r

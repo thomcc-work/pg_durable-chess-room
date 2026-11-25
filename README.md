@@ -32,6 +32,11 @@ B returns `a2h2`: the rook covers the h-file and the white king on f7 covers
 g7 and g8. On board 2 the result goes the other way. Use
 `./scripts/run.sh score "$run"` to revisit either comparison.
 
+Omit `2` from `new` for all twelve boards. On board 5 either a queen or a
+rook promotion is mate. Board 8 gives A a plausible chess answer in the
+wrong notation; board 9 gives B a canned HTTP 429. Neither is a chess miss,
+and neither stops board 10 from being evaluated.
+
 `new` freezes both exact prompts, FENs, accepted moves, and canned responses
 under a new run ID. `finish` starts one workflow per cell, one pair at a time.
 The request is a SQL activity standing in for chat; each invocation appends a
